@@ -472,6 +472,16 @@ if (require.main === module && server) {
   });
 }
 
+// ── 404 Handler for API routes ────────────────────
+app.use('/api/*', (req, res) => {
+  res.status(404).json({ error: 'API endpoint not found' });
+});
+
+// ── 404 Fallback for frontend ──────────────────────
+app.use((req, res) => {
+  res.status(404).sendFile(path.join(__dirname, '../frontend/index.html'));
+});
+
 app.server = server;
 app.io = io;
 module.exports = app;
