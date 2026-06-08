@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <script>window.__DOTSBAR_API_BASE__ = 'https://dotsbar.onrender.com';</script>
+  <script>window.__DOTSBAR_API_BASE__ = window.__DOTSBAR_API_BASE__ || window.location.origin;</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>DotsBar — Events</title>
   <link rel="stylesheet" href="styles.css">
@@ -149,7 +149,7 @@
 
 <div class="toast-container" id="toast-container"></div>
 <script src="script.js"></script>
-<script>window.__DOTSBAR_API_BASE__ = window.__DOTSBAR_API_BASE__ || 'https://dotsbar.onrender.com';</script>
+<script>window.__DOTSBAR_API_BASE__ = window.__DOTSBAR_API_BASE__ || window.location.origin;</script>
 <script>
 let liveEvents = [];
 const upcoming = [

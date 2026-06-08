@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script>window.__DOTSBAR_API_BASE__ = 'https://dotsbar.onrender.com';</script>
+    <script>window.__DOTSBAR_API_BASE__ = window.__DOTSBAR_API_BASE__ || window.location.origin;</script>
     <title>Rooms - DotBar</title>
     <link rel="stylesheet" href="styles.css">
 </head>
@@ -57,7 +57,7 @@
         </section>
     </main>
 
-    <script src="https://dotsbar.onrender.com/socket.io/socket.io.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
     <script src="rooms.js"></script>
 </body>
 </html>
