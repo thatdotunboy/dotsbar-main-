@@ -99,11 +99,10 @@ app.post('/api/auth/register', async (req, res) => {
     // Check if email already exists
     const existing = await User.findOne({ email });
     if (existing) return res.status(400).json({ error: 'Email already registered' });
-    const hashedPassword = await bcrypt.hash(password, 12);
     const newUser = new User({
       username,
       email,
-      password: hashedPassword,
+      password,
       isCreator: isCreator || false,
       balance: 0
     });
@@ -473,9 +472,13 @@ if (require.main === module && server) {
 }
 
 // ── 404 Handler for API routes ────────────────────
+// Return JSON for API paths to keep frontend `res.json()` from failing.
 app.use('/api/*', (req, res) => {
-  res.status(404).json({ error: 'API endpoint not found' });
+  // Helpful in production debugging (harmless)
+  console.warn('[API 404]', req.method, req.originalUrl);
+  res.status(404).json({ error: 'API endpoint not found', path: req.originalUrl });
 });
+
 
 // ── 404 Fallback for frontend ──────────────────────
 app.use((req, res) => {
