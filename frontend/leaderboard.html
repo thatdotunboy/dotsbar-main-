@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DotsBar — Leaderboard</title>
+  <meta name="description" content="See the top tippers and most active users on DotsBar.">
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    body { padding-top: 68px; }
+    .leaderboard-wrap {
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 0 20px;
+    }
+    .leaderboard-header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+    .leaderboard-header h1 {
+      font-size: 2.5rem;
+      font-weight: 800;
+      color: var(--amber);
+      margin-bottom: 10px;
+    }
+    .leaderboard-header p {
+      color: var(--text-muted);
+      font-size: 1.1rem;
+    }
+    .leaderboard-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--bg-card);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      border: 1px solid var(--glass-border);
+    }
+    .leaderboard-table th, .leaderboard-table td {
+      padding: 16px 20px;
+      text-align: left;
+      border-bottom: 1px solid var(--glass-border);
+    }
+    .leaderboard-table th {
+      background: rgba(255,255,255,0.02);
+      font-weight: 600;
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .leaderboard-table tr:last-child td {
+      border-bottom: none;
+    }
+    .leaderboard-table tr:hover {
+      background: rgba(255,255,255,0.02);
+    }
+    .rank-cell {
+      width: 60px;
+      text-align: center !important;
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--amber);
+    }
+    .user-cell {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 600;
+      font-size: 1.1rem;
+    }
+    .amount-cell {
+      text-align: right !important;
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700;
+      color: var(--amber);
+      font-size: 1.1rem;
+    }
+  </style>
+</head>
+<body>
+
+<div class="bar-ambient"></div>
+
+<!-- NAV -->
+<header id="main-header">
+  <div class="container">
+    <a href="index.html" class="logo">
+      <img src="logo.svg" alt="DotsBar">
+    </a>
+    <nav>
+      <ul>
+        <li><a href="bar.html">🍺 The Bar</a></li>
+        <li><a href="stream.html" class="live-indicator">Stream</a></li>
+        <li><a href="events.html">Events</a></li>
+        <li><a href="marketplace.html">Shop</a></li>
+        <li><a href="index.html">Home</a></li>
+      </ul>
+    </nav>
+    <div class="nav-actions">
+      <button class="btn btn-ghost btn-sm" id="open-login">Log In</button>
+      <a href="stream.html" class="btn btn-danger btn-sm">🔴 Go Live</a>
+    </div>
+  </div>
+</header>
+
+<div class="leaderboard-wrap">
+  <div class="leaderboard-header">
+    <h1>🏆 Top Tippers Leaderboard</h1>
+    <p>The most generous legends in the DotsBar.</p>
+  </div>
+  
+  <table class="leaderboard-table">
+    <thead>
+      <tr>
+        <th class="rank-cell">#</th>
+        <th>User</th>
+        <th class="amount-cell">Total Tipped</th>
+      </tr>
+    </thead>
+    <tbody id="leaderboard-body">
+      <tr>
+        <td colspan="3" style="text-align:center;color:var(--text-muted);padding:40px;">
+          Loading leaderboard...
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- TOAST -->
+<div class="toast-container" id="toast-container"></div>
+
+<script src="script.js"></script>
+<script>
+  async function fetchLeaderboard() {
+    try {
+      const res = await fetch('/api/leaderboard');
+      if (!res.ok) throw new Error('Failed to fetch');
+      const data = await res.json();
+      
+      const tbody = document.getElementById('leaderboard-body');
+      
+      if (!data.topTippers || data.topTippers.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--text-muted);padding:40px;">No tips have been sent yet.</td></tr>';
+        return;
+      }
+      
+      tbody.innerHTML = data.topTippers.map((t, idx) => {
+        let rank = idx + 1;
+        if (rank === 1) rank = '🏆';
+        else if (rank === 2) rank = '🥈';
+        else if (rank === 3) rank = '🥉';
+        
+        const initial = t.username ? t.username.charAt(0).toUpperCase() : '?';
+        const colors = ['#f59e0b','#7c3aed','#10b981','#ec4899','#3b82f6','#a78bfa','#ef4444'];
+        const col = colors[idx % colors.length];
+        
+        return `
+          <tr>
+            <td class="rank-cell">${rank}</td>
+            <td>
+              <div class="user-cell">
+                <div class="avatar avatar-sm" style="background:${col};color:#fff;">${initial}</div>
+                ${t.username}
+              </div>
+            </td>
+            <td class="amount-cell">${(t.totalTipped || 0).toLocaleString()} 🪙</td>
+          </tr>
+        `;
+      }).join('');
+    } catch (error) {
+      console.error(error);
+      const tbody = document.getElementById('leaderboard-body');
+      tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--crimson);padding:40px;">Error loading leaderboard data.</td></tr>';
+    }
+  }
+
+  fetchLeaderboard();
+  setInterval(fetchLeaderboard, 30000);
+</script>
+</body>
+</html>

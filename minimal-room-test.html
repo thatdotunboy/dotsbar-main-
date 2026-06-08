@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>DotsBar Minimal Room Test</title>
+  <style>
+    body{margin:0;font-family:Arial,sans-serif;background:#0b0b14;color:#f1f5f9;}
+    header{padding:16px 20px;border-bottom:1px solid rgba(255,255,255,0.08);display:flex;gap:12px;align-items:center;justify-content:space-between;}
+    a{color:#1976d2;text-decoration:none;font-weight:700;}
+    main{max-width:1100px;margin:0 auto;padding:18px 20px 60px;}
+    .row{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;}
+    .card{background:#111122;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:14px;flex:1;min-width:320px;}
+    input,button{border-radius:10px;padding:10px 12px;}
+    input{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.10);color:#f1f5f9;}
+    button{border:none;background:#1976d2;color:#000;font-weight:800;cursor:pointer;}
+    button:disabled{opacity:.6;cursor:not-allowed;}
+    #rooms{display:flex;flex-direction:column;gap:8px;}
+    .room{background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:10px;display:flex;gap:10px;align-items:flex-start;}
+    .room b{display:block;margin-bottom:3px;}
+    #chat{height:420px;overflow:auto;background:rgba(0,0,0,0.25);border-radius:10px;padding:10px; border:1px solid rgba(255,255,255,0.06)}
+    .msg{margin:8px 0;font-size:13px}
+    .msg b{color:#1976d2}
+    .muted{color:#94a3b8;font-size:12px}
+    .toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:#000;border:1px solid rgba(255,255,255,0.1);color:#fff;padding:10px 14px;border-radius:12px;}
+  </style>
+</head>
+<body>
+  <header>
+    <b>DotsBar Minimal Room Test</b>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <span id="conn" class="muted">socket: offline</span>
+      <a href="/" aria-label="Home">home</a>
+    </div>
+  </header>
+  <main>
+    <div class="row">
+      <div class="card">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:space-between;">
+          <div>
+            <b style="font-size:16px;">Rooms</b>
+            <div class="muted" id="roomsMeta">loading…</div>
+          </div>
+        </div>
+        <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;">
+          <input id="name" placeholder="room name" style="flex:1;min-width:220px;"/>
+          <button id="create">Create (login required)</button>
+        </div>
+        <div style="margin-top:12px;" id="rooms"></div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;gap:10px;align-items:center;justify-content:space-between;">
+          <div>
+            <b style="font-size:16px;">Chat</b>
+            <div class="muted" id="roomLabel">select a room</div>
+          </div>
+          <div style="display:flex;gap:10px;">
+            <button id="join" disabled>Join</button>
+            <button id="leave" disabled style="background:#2b2b4a;">Leave</button>
+          </div>
+        </div>
+        <div id="chat" aria-live="polite"></div>
+        <div style="display:flex;gap:10px;align-items:center;margin-top:10px;">
+          <input id="msg" placeholder="message" style="flex:1;" maxlength="200"/>
+          <button id="send" disabled>Send</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const API_BASE = window.__DOTSBAR_API_BASE__ || location.origin;
+    let socket=null;
+    let selected=null;
+    let joined=false;
+
+    const token = localStorage.getItem('token');
+    const user = (()=>{ try{ return JSON.parse(localStorage.getItem('user')||'null'); } catch { return null; } })();
+
+    const connEl=document.getElementById('conn');
+    const roomsEl=document.getElementById('rooms');
+    const roomsMeta=document.getElementById('roomsMeta');
+    const roomLabel=document.getElementById('roomLabel');
+
+    const joinBtn=document.getElementById('join');
+    const leaveBtn=document.getElementById('leave');
+    const sendBtn=document.getElementById('send');
+    const msgEl=document.getElementById('msg');
+    const chatEl=document.getElementById('chat');
+
+    function toast(t){ const x=document.createElement('div'); x.className='toast'; x.textContent=t; document.body.appendChild(x); setTimeout(()=>x.remove(),2000); }
+
+    function append(username,message){
+      const d=document.createElement('div');
+      d.className='msg';
+      d.innerHTML = `<b>${escapeHtml(username||'Guest')}</b>: ${escapeHtml(message||'')}`;
+      chatEl.appendChild(d);
+      chatEl.scrollTop=chatEl.scrollHeight;
+    }
+
+    function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'<').replace(/>/g,'>'); }
+
+    async function loadRooms(){
+      const r=await fetch(API_BASE+'/api/rooms');
+      const j=await r.json();
+      const list=j.rooms||[];
+      roomsMeta.textContent = `${list.length} available`;
+      roomsEl.innerHTML='';
+      list.forEach(room=>{
+        const div=document.createElement('div');
+        div.className='room';
+        div.innerHTML = `
+          <div style="flex:1;min-width:0;">
+            <b>${escapeHtml(room.name)}</b>
+            <div class="muted">by ${escapeHtml(room.creator||'Unknown')} · viewers ${room.viewerCount??0}</div>
+          </div>
+          <button type="button" style="padding:8px 10px;" data-id="${room.id}">Select</button>
+        `;
+        div.querySelector('button').addEventListener('click',()=>selectRoom(room.id,room.name));
+        roomsEl.appendChild(div);
+      });
+    }
+
+    function selectRoom(id,name){
+      selected=id;
+      roomLabel.textContent = 'room: ' + name;
+      joinBtn.disabled = joined || !selected;
+    }
+
+    function connect(){
+      socket = io(API_BASE, { transports:['websocket','polling'] });
+      socket.on('connect',()=>{ connEl.textContent='socket: connected'; if(token) socket.emit('auth',token); });
+      socket.on('disconnect',()=>{ connEl.textContent='socket: offline'; });
+      socket.on('chat-message',({username,message})=>{ if(joined) append(username,message); });
+    }
+
+    document.getElementById('create').addEventListener('click', async ()=>{
+      if(!token){ toast('Login required'); return; }
+      const name=document.getElementById('name').value.trim();
+      if(!name){ toast('Room name required'); return; }
+      const r=await fetch(API_BASE+'/api/rooms',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify({name,description:''})});
+      if(!r.ok){ const d=await r.json().catch(()=>({})); toast(d.error||'Create failed'); return; }
+      await loadRooms();
+      document.getElementById('name').value='';
+      toast('Room created');
+    });
+
+    joinBtn.addEventListener('click',()=>{
+      if(!socket||!selected) return;
+      socket.emit('join-room', selected);
+      joined=true;
+      joinBtn.disabled=true;
+      leaveBtn.disabled=false;
+      sendBtn.disabled=false;
+      chatEl.innerHTML='';
+      toast('Joined');
+    });
+
+    leaveBtn.addEventListener('click',()=>{
+      if(!socket||!selected) return;
+      socket.emit('leave-room', selected);
+      joined=false;
+      joinBtn.disabled=!selected;
+      leaveBtn.disabled=true;
+      sendBtn.disabled=true;
+      toast('Left');
+    });
+
+    sendBtn.addEventListener('click',()=>{
+      const m=msgEl.value.trim();
+      if(!m||!socket||!joined||!selected) return;
+      socket.emit('chat-message',{roomId:selected,message:m});
+      msgEl.value='';
+    });
+    msgEl.addEventListener('keydown',e=>{ if(e.key==='Enter') sendBtn.click(); });
+
+    (function(){
+      const s=document.createElement('script');
+      s.src = API_BASE.replace(/\/$/,'') + '/socket.io/socket.io.js';
+      s.onload = ()=>{ connect(); loadRooms(); };
+      s.onerror = ()=>{ toast('Socket.io not reachable'); };
+      document.head.appendChild(s);
+    })();
+  </script>
+</body>
+</html>
+

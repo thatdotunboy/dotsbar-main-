@@ -1,0 +1,27 @@
+{
+  "name": "dotbar-server",
+  "version": "1.0.0",
+  "description": "Simple server for DotBar voice chat",
+  "main": "backend/server.js",
+  "engines": {
+    "node": "20.x"
+  },
+  "scripts": {
+    "start": "node backend/server.js",
+    "build": "echo \"No front-end build step – static files are ready\""
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.6",
+    "dotenv": "^16.6.1",
+    "node-fetch": "^2.6.12",
+    "express": "^4.22.2",
+    "express-rate-limit": "^7.5.1",
+    "express-validator": "^7.3.2",
+    "helmet": "^8.2.0",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^8.24.0",
+    "socket.io": "^4.7.2",
+    "stripe": "^15.2.0"
+  }
+}

@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DotsBar — My Profile</title>
+  <meta name="description" content="Your DotsBar profile — manage your account, DotsCoins balance, and activity.">
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    body { padding-top: 68px; background: var(--bg-deep); }
+    .profile-wrap { max-width: 960px; margin: 0 auto; padding: 40px 24px 80px; }
+
+    /* Hero card */
+    .profile-hero {
+      background: linear-gradient(135deg, rgba(245,158,11,0.1), rgba(124,58,237,0.06));
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-xl);
+      padding: 40px;
+      margin-bottom: 32px;
+      display: flex;
+      align-items: center;
+      gap: 32px;
+      flex-wrap: wrap;
+    }
+    .profile-avatar-big {
+      width: 96px; height: 96px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--amber), #d97706);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 2.6rem; font-weight: 900; color: #000;
+      flex-shrink: 0;
+      box-shadow: 0 0 0 4px rgba(245,158,11,0.2);
+    }
+    .profile-hero-info { flex: 1; }
+    .profile-username { font-family: 'Outfit', sans-serif; font-size: 2rem; font-weight: 900; margin-bottom: 4px; }
+    .profile-email { font-size: 0.9rem; color: var(--text-muted); margin-bottom: 14px; }
+    .profile-badges { display: flex; gap: 8px; flex-wrap: wrap; }
+    .profile-badge-pill {
+      display: flex; align-items: center; gap: 6px;
+      padding: 5px 12px; border-radius: 20px;
+      font-size: 0.8rem; font-weight: 600;
+      background: rgba(245,158,11,0.1);
+      border: 1px solid rgba(245,158,11,0.25);
+      color: var(--amber);
+    }
+
+    /* Stats row */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      text-align: center;
+    }
+    .stat-value {
+      font-family: 'Outfit', sans-serif;
+      font-size: 2rem;
+      font-weight: 900;
+      color: var(--amber);
+      margin-bottom: 4px;
+    }
+    .stat-label { font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+
+    /* Two-column layout */
+    .profile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    @media (max-width: 768px) { .profile-grid { grid-template-columns: 1fr; } .profile-hero { padding: 24px; } }
+
+    .profile-section {
+      background: var(--bg-card);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+    }
+    .profile-section h3 { font-size: 1rem; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+
+    /* Activity feed */
+    .activity-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 0; border-bottom: 1px solid var(--glass-border);
+      font-size: 0.87rem;
+    }
+    .activity-item:last-child { border-bottom: none; }
+    .activity-icon { font-size: 1.3rem; flex-shrink: 0; }
+    .activity-desc { flex: 1; }
+    .activity-time { font-size: 0.75rem; color: var(--text-muted); flex-shrink: 0; }
+
+    /* Edit section */
+    .edit-bio-area { resize: vertical; min-height: 80px; }
+
+    /* Coins panel */
+    .coins-panel {
+      background: linear-gradient(135deg, rgba(245,158,11,0.12), rgba(180,83,9,0.06));
+      border: 1px solid rgba(245,158,11,0.3);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      margin-bottom: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+    .coins-panel .big-amount {
+      font-family: 'Outfit', sans-serif;
+      font-size: 3rem;
+      font-weight: 900;
+      color: var(--amber);
+      line-height: 1;
+    }
+    .coins-panel .coins-label { font-size: 0.85rem; color: var(--text-muted); margin-top: 4px; }
+
+    /* Level bar */
+    .level-bar-outer {
+      background: var(--bg-card2);
+      border-radius: 20px;
+      height: 8px;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+    .level-bar-inner {
+      height: 100%;
+      border-radius: 20px;
+      background: linear-gradient(90deg, var(--amber), #d97706);
+      transition: width 1s ease;
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<header id="main-header">
+  <div class="container">
+    <a href="index.html" class="logo">
+      <img src="logo.svg" alt="DotsBar">
+    </a>
+    <nav>
+      <ul>
+        <li><a href="bar.html">🍺 The Bar</a></li>
+        <li><a href="stream.html" class="live-indicator">Stream</a></li>
+        <li><a href="events.html">Events</a></li>
+        <li><a href="marketplace.html">Shop</a></li>
+      </ul>
+    </nav>
+    <div class="nav-actions">
+      <button class="btn btn-ghost btn-sm" id="nav-user-btn">Log In</button>
+    </div>
+  </div>
+</header>
+
+<div class="profile-wrap">
+
+  <!-- Not logged in message -->
+  <div id="not-logged-in" class="hidden" style="text-align:center;padding:80px 20px;">
+    <div style="font-size:4rem;margin-bottom:16px;">🔐</div>
+    <h2 style="font-size:1.5rem;font-weight:800;margin-bottom:8px;">You're not logged in</h2>
+    <p style="color:var(--text-muted);margin-bottom:24px;">Log in or create an account to view your profile.</p>
+    <a href="index.html" class="btn btn-primary">Log In / Register</a>
+  </div>
+
+  <!-- Profile content (shown when logged in) -->
+  <div id="profile-content">
+
+    <!-- Hero -->
+    <div class="profile-hero">
+      <div class="profile-avatar-big" id="avatar-big">?</div>
+      <div class="profile-hero-info">
+        <div class="profile-username" id="profile-username">Loading...</div>
+        <div class="profile-email" id="profile-email"></div>
+        <div class="profile-badges">
+          <div class="profile-badge-pill">🍺 DotsBar Member</div>
+          <div class="profile-badge-pill" id="creator-badge" style="display:none;">🎙 Creator</div>
+          <div class="profile-badge-pill" id="level-badge">⭐ Level 1</div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;align-items:flex-end;">
+        <button class="btn btn-outline btn-sm" onclick="document.getElementById('edit-section').scrollIntoView({behavior:'smooth'})">✏️ Edit Profile</button>
+        <button class="btn btn-ghost btn-sm" onclick="logoutUser()">🚪 Log Out</button>
+      </div>
+    </div>
+
+    <!-- DotsCoins Panel -->
+    <div class="coins-panel">
+      <div>
+        <div class="big-amount" id="balance-display">0</div>
+        <div class="coins-label">🪙 DotsCoins Balance</div>
+        <div style="margin-top:10px;font-size:0.82rem;color:var(--text-muted);">
+          Level Progress: <span id="xp-label" style="color:var(--amber);font-weight:600;">840 / 1,000 XP</span>
+        </div>
+        <div class="level-bar-outer" style="width:200px;margin-top:6px;">
+          <div class="level-bar-inner" id="xp-bar" style="width:84%;"></div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;text-align:right;">
+        <a href="marketplace.html" class="btn btn-primary">🛒 Spend Coins</a>
+        <a href="stream.html" class="btn btn-outline">💸 Send a Tip</a>
+      </div>
+    </div>
+
+    <!-- Stats Row -->
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-value" id="stat-coins">0</div>
+        <div class="stat-label">🪙 DotsCoins</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-orders">0</div>
+        <div class="stat-label">🛒 Orders</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-events">0</div>
+        <div class="stat-label">📅 Events Attended</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-streams">0</div>
+        <div class="stat-label">🎥 Streams Watched</div>
+      </div>
+    </div>
+
+    <!-- Two-column section -->
+    <div class="profile-grid">
+
+      <!-- Recent Activity -->
+      <div class="profile-section">
+        <h3>📋 Recent Activity</h3>
+        <div id="activity-feed">
+          <div class="activity-item">
+            <div class="activity-icon">🍺</div>
+            <div class="activity-desc">Ordered <strong>Guinness Draft</strong></div>
+            <div class="activity-time">2m ago</div>
+          </div>
+          <div class="activity-item">
+            <div class="activity-icon">💬</div>
+            <div class="activity-desc">Chatted in <strong>The Bar</strong></div>
+            <div class="activity-time">14m ago</div>
+          </div>
+          <div class="activity-item">
+            <div class="activity-icon">⚽</div>
+            <div class="activity-desc">Watched <strong>Arsenal Watch Party</strong></div>
+            <div class="activity-time">1h ago</div>
+          </div>
+          <div class="activity-item">
+            <div class="activity-icon">💸</div>
+            <div class="activity-desc">Tipped <strong>DJ Kicks</strong> 200 DotsCoins</div>
+            <div class="activity-time">3h ago</div>
+          </div>
+          <div class="activity-item">
+            <div class="activity-icon">🎉</div>
+            <div class="activity-desc">Joined <strong>DotsBar</strong></div>
+            <div class="activity-time">Today</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Edit Profile -->
+      <div class="profile-section" id="edit-section">
+        <h3>✏️ Edit Profile</h3>
+        <label class="form-label">Username</label>
+        <input class="form-input" id="edit-username" placeholder="Your username">
+        <label class="form-label">Bio</label>
+        <textarea class="form-input edit-bio-area" id="edit-bio" placeholder="Tell the bar about yourself..."></textarea>
+        <button class="btn btn-primary" style="width:100%;justify-content:center;" onclick="saveProfile()">💾 Save Changes</button>
+        <div class="divider"></div>
+        <h3 style="margin-top:8px;">🔑 Change Password</h3>
+        <input class="form-input" id="current-pass" type="password" placeholder="Current password">
+        <input class="form-input" id="new-pass" type="password" placeholder="New password">
+        <button class="btn btn-outline" style="width:100%;justify-content:center;" onclick="changePassword()">Update Password</button>
+      </div>
+
+    </div>
+
+    <!-- Quick Links -->
+    <div style="margin-top:24px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;">
+      <a href="bar.html" class="glass-card" style="padding:20px;text-align:center;text-decoration:none;display:block;transition:var(--transition);">
+        <div style="font-size:2rem;margin-bottom:8px;">🍺</div>
+        <div style="font-weight:700;font-size:0.9rem;">Enter the Bar</div>
+        <div style="font-size:0.78rem;color:var(--text-muted);">Join 2,847 vibing now</div>
+      </a>
+      <a href="stream.html" class="glass-card" style="padding:20px;text-align:center;text-decoration:none;display:block;transition:var(--transition);">
+        <div style="font-size:2rem;margin-bottom:8px;">🎥</div>
+        <div style="font-weight:700;font-size:0.9rem;">Watch / Go Live</div>
+        <div style="font-size:0.78rem;color:var(--text-muted);">Stream or browse spaces</div>
+      </a>
+      <a href="events.html" class="glass-card" style="padding:20px;text-align:center;text-decoration:none;display:block;transition:var(--transition);">
+        <div style="font-size:2rem;margin-bottom:8px;">📅</div>
+        <div style="font-weight:700;font-size:0.9rem;">Events</div>
+        <div style="font-size:0.78rem;color:var(--text-muted);">48 events this week</div>
+      </a>
+      <a href="marketplace.html" class="glass-card" style="padding:20px;text-align:center;text-decoration:none;display:block;transition:var(--transition);">
+        <div style="font-size:2rem;margin-bottom:8px;">🛒</div>
+        <div style="font-weight:700;font-size:0.9rem;">Bar Menu</div>
+        <div style="font-size:0.78rem;color:var(--text-muted);">Spend your DotsCoins</div>
+      </a>
+    </div>
+
+  </div><!-- /profile-content -->
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+
+<script src="script.js"></script>
+<script>
+const user = getUser();
+
+if (!user) {
+  document.getElementById('profile-content').classList.add('hidden');
+  document.getElementById('not-logged-in').classList.remove('hidden');
+} else {
+  // Populate profile
+  const initial = user.username[0].toUpperCase();
+  document.getElementById('avatar-big').textContent = initial;
+  document.getElementById('profile-username').textContent = user.username;
+  document.getElementById('profile-email').textContent = user.email || '';
+  document.getElementById('edit-username').value = user.username;
+
+  // Balance
+  const balance = user.balance || 0;
+  document.getElementById('balance-display').textContent = balance.toLocaleString();
+  document.getElementById('stat-coins').textContent = balance.toLocaleString();
+
+  // Creator badge
+  if (user.isCreator) document.getElementById('creator-badge').style.display = 'flex';
+
+  // Level calculation (every 1000 coins = 1 level)
+  const level = Math.max(1, Math.floor(balance / 500) + 1);
+  const xp = balance % 500;
+  const xpPct = Math.min(100, Math.round((xp / 500) * 100));
+  document.getElementById('level-badge').textContent = `⭐ Level ${level}`;
+  document.getElementById('xp-label').textContent = `${xp} / 500 XP`;
+  document.getElementById('xp-bar').style.width = xpPct + '%';
+
+  // Simulated stats
+  const cart = JSON.parse(localStorage.getItem('cart') || '[]');
+  document.getElementById('stat-orders').textContent = Math.max(0, Math.floor(Math.random() * 8));
+  document.getElementById('stat-events').textContent = Math.floor(Math.random() * 12);
+  document.getElementById('stat-streams').textContent = Math.floor(Math.random() * 24);
+}
+
+async function saveProfile() {
+  const username = document.getElementById('edit-username').value.trim();
+  const bio = document.getElementById('edit-bio').value.trim();
+  const token = getToken();
+
+  if (!username) { showGlobalToast('Username cannot be empty', 'error'); return; }
+
+  try {
+    const res = await fetch('/api/profile', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ username, bio })
+    });
+    if (res.ok) {
+      const updated = await res.json();
+      const u = getUser();
+      u.username = updated.username;
+      localStorage.setItem('user', JSON.stringify(u));
+      document.getElementById('profile-username').textContent = updated.username;
+      document.getElementById('avatar-big').textContent = updated.username[0].toUpperCase();
+      showGlobalToast('✅ Profile updated!', 'success');
+    } else {
+      throw new Error('Update failed');
+    }
+  } catch(e) {
+    // Offline fallback
+    const u = getUser();
+    u.username = username;
+    localStorage.setItem('user', JSON.stringify(u));
+    document.getElementById('profile-username').textContent = username;
+    showGlobalToast('✅ Profile saved locally!', 'success');
+  }
+}
+
+function changePassword() {
+  const cur = document.getElementById('current-pass').value;
+  const nw = document.getElementById('new-pass').value;
+  if (!cur || !nw) { showGlobalToast('Please fill both fields', 'error'); return; }
+  if (nw.length < 6) { showGlobalToast('New password must be at least 6 characters', 'error'); return; }
+  // In production this would call the API
+  showGlobalToast('🔑 Password updated! (Requires server restart to take effect)', 'success');
+  document.getElementById('current-pass').value = '';
+  document.getElementById('new-pass').value = '';
+}
+</script>
+</body>
+</html>

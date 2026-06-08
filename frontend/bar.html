@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <script>window.__DOTSBAR_API_BASE__ = 'https://dotsbar.onrender.com';</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DotsBar — The Bar</title>
+  <meta name="description" content="Live Premier League matches, streaming rooms, real-time chat and virtual drinks — all inside DotsBar.">
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    body { padding-top: 68px; }
+    .bar-page-wrap {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 20px;
+      padding: 20px 24px 60px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    .bar-left { display: flex; flex-direction: column; gap: 20px; }
+    .bar-right { display: flex; flex-direction: column; gap: 16px; }
+
+    .ad-banner {
+      background: linear-gradient(135deg, #1a1200, #2a1f00);
+      border: 1px solid rgba(245,158,11,0.3);
+      border-radius: var(--radius-md);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      overflow: hidden;
+      position: relative;
+    }
+    .ad-banner::before {
+      content: '';
+      position: absolute;
+      top: -50%; right: -10%;
+      width: 200px; height: 200%;
+      background: radial-gradient(ellipse, rgba(245,158,11,0.1), transparent 70%);
+    }
+    .ad-brand { display: flex; align-items: center; gap: 14px; }
+    .ad-logo { font-size: 2.5rem; }
+    .ad-text h3 { font-size: 1rem; font-weight: 700; margin-bottom: 4px; }
+    .ad-text p { font-size: 0.8rem; color: var(--text-muted); }
+    .ad-cta { flex-shrink: 0; }
+
+    .scores-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+    }
+    .scores-panel-header {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--glass-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .scores-panel-header h3 { font-size: 0.95rem; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+    .scores-list { padding: 0; }
+
+    .score-row {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--glass-border);
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .score-row:hover { background: rgba(255,255,255,0.02); }
+    .score-row:last-child { border-bottom: none; }
+    .score-row .team-side { display: flex; align-items: center; gap: 8px; }
+    .score-row .team-side.right { flex-direction: row-reverse; text-align: right; }
+    .score-row .team-crest-sm { font-size: 1.4rem; }
+    .score-row .team-short { font-size: 0.85rem; font-weight: 600; }
+    .score-row .score-center { text-align: center; }
+    .score-row .score-num { font-family: 'Outfit',sans-serif; font-size: 1.2rem; font-weight: 800; color: var(--amber); }
+    .score-row .min-label { font-size: 0.7rem; color: var(--crimson); font-weight: 600; display: block; }
+
+    .streams-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-md);
+    }
+    .panel-header {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--glass-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .panel-header h3 { font-size: 0.95rem; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+
+    .stream-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--glass-border);
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .stream-row:hover { background: rgba(255,255,255,0.02); }
+    .stream-row:last-child { border-bottom: none; }
+    .stream-thumb-mini {
+      width: 80px; height: 50px;
+      border-radius: var(--radius-sm);
+      background: linear-gradient(135deg, #1a0a2e, #4a1a6e);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.4rem;
+      flex-shrink: 0;
+      position: relative;
+    }
+    .stream-row-info { flex: 1; min-width: 0; }
+    .stream-row-title { font-size: 0.85rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px; }
+    .stream-row-sub { font-size: 0.75rem; color: var(--text-muted); display: flex; gap: 8px; }
+
+    .jukebox-panel {
+      background: linear-gradient(135deg, #1a0a2e, #2d1b4e);
+      border: 1px solid rgba(124,58,237,0.3);
+      border-radius: var(--radius-md);
+      padding: 16px;
+    }
+    .jukebox-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+    .jukebox-header h3 { font-size: 0.9rem; font-weight: 700; color: #a78bfa; display: flex; align-items: center; gap: 8px; }
+    .now-playing { display: flex; align-items: center; gap: 12px; }
+    .disc { width: 48px; height: 48px; border-radius: 50%; background: linear-gradient(135deg, #4a1a6e, #1a0a2e); display: flex; align-items: center; justify-content: center; font-size: 1.4rem; animation: spin-slow 4s linear infinite; border: 2px solid rgba(124,58,237,0.5); }
+    @keyframes spin-slow { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    .track-info { flex: 1; }
+    .track-name { font-size: 0.9rem; font-weight: 600; margin-bottom: 2px; }
+    .track-artist { font-size: 0.75rem; color: #a78bfa; }
+    .visualizer { display: flex; align-items: flex-end; gap: 2px; height: 24px; }
+    .viz-bar { width: 3px; background: #a78bfa; border-radius: 2px; animation: wave-anim 0.6s ease-in-out infinite; }
+
+    @media (max-width: 1024px) { .bar-page-wrap { grid-template-columns: 1fr; } }
+    @media (max-width: 768px) { .bar-page-wrap { padding: 14px; } }
+  </style>
+</head>
+<body>
+
+<div class="bar-ambient"></div>
+
+<!-- NAV -->
+<header id="main-header">
+  <div class="container">
+    <a href="index.html" class="logo">
+      <img src="logo.svg" alt="DotsBar">
+     
+    </a>
+    <nav>
+      <ul>
+        <li><a href="bar.html" class="active">🍺 The Bar</a></li>
+        <li><a href="stream.html" class="live-indicator">Stream</a></li>
+        <li><a href="events.html">Events</a></li>
+        <li><a href="marketplace.html">Shop</a></li>
+        <li><a href="index.html">Home</a></li>
+      </ul>
+    </nav>
+    <div class="nav-actions">
+      <button class="btn btn-ghost btn-sm" id="open-login">Log In</button>
+      <a href="stream.html" class="btn btn-danger btn-sm">🔴 Go Live</a>
+    </div>
+  </div>
+</header>
+
+<!-- LIVE TICKER -->
+<div class="ticker-bar" style="margin-top:0;">
+  <div class="ticker-wrapper">
+    <div class="ticker-label">⚽ LIVE</div>
+    <div class="ticker-track" id="ticker-track"></div>
+  </div>
+</div>
+
+<!-- MAIN BAR LAYOUT -->
+<div class="bar-page-wrap">
+
+  <!-- LEFT COLUMN -->
+  <div class="bar-left">
+
+    <!-- Ad Banner — Guinness -->
+    <div class="ad-banner" id="ad-banner">
+      <div class="ad-brand">
+        <div class="ad-logo">🍺</div>
+        <div class="ad-text">
+          <h3>Guinness — Made of More</h3>
+          <p>The official drink of DotsBar. Order yours in the shop.</p>
+        </div>
+      </div>
+      <a href="marketplace.html" class="btn btn-primary btn-sm ad-cta">Order Now</a>
+    </div>
+
+    <!-- Live Scores -->
+    <div class="scores-panel">
+      <div class="scores-panel-header">
+        <h3>⚽ Premier League — Live</h3>
+        <span class="live-badge">Live</span>
+      </div>
+      <div class="scores-list" id="scores-list">
+        <!-- JS populated -->
+      </div>
+    </div>
+
+    <!-- Live Streams Inside Bar -->
+    <div class="streams-panel">
+      <div class="panel-header">
+        <h3>🎥 Live Streams in the Bar</h3>
+        <a href="stream.html" class="btn btn-outline btn-sm">Browse All</a>
+      </div>
+      <div id="stream-rows">
+        <!-- JS populated -->
+      </div>
+    </div>
+
+    <!-- Jukebox -->
+    <div class="jukebox-panel">
+      <div class="jukebox-header">
+        <h3>🎵 Jukebox — Now Playing</h3>
+        <button class="btn btn-ghost btn-sm" style="color:#a78bfa;border-color:#a78bfa33;">Skip 🎵</button>
+      </div>
+      <div class="now-playing">
+        <div class="disc">💿</div>
+        <div class="track-info">
+          <div class="track-name">Blinding Lights</div>
+          <div class="track-artist">The Weeknd</div>
+        </div>
+        <div class="visualizer" id="visualizer"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- RIGHT SIDEBAR -->
+  <div class="bar-right">
+
+    <!-- Chat Panel -->
+    <div class="chat-panel">
+      <div class="chat-header">
+        <h3>💬 Bar Chat <span class="live-badge" style="margin-left:4px;">Live</span></h3>
+        <span id="chat-user-count" style="font-size:0.8rem;color:var(--text-muted);">238 online</span>
+      </div>
+      <div class="chat-messages" id="chat-messages">
+        <!-- populated by JS / Socket.io -->
+      </div>
+      <div class="chat-input-row">
+        <input class="chat-input" id="chat-input" placeholder="Drop a message..." maxlength="200">
+        <button class="btn btn-primary btn-sm" id="chat-send">Send</button>
+      </div>
+    </div>
+
+    <!-- Order Panel -->
+    <div class="glass-card" style="padding:16px;">
+      <h3 style="font-size:0.9rem;font-weight:700;margin-bottom:12px;">🍺 Quick Order</h3>
+      <div style="display:flex;flex-direction:column;gap:8px;" id="quick-order-list"></div>
+      <div class="divider"></div>
+      <a href="marketplace.html" class="btn btn-outline btn-sm w-full" style="justify-content:center;margin-top:0;">Full Bar Menu →</a>
+    </div>
+
+    <!-- Top Tippers Leaderboard -->
+    <div class="glass-card" style="padding:16px;">
+      <h3 style="font-size:0.9rem;font-weight:700;margin-bottom:12px;">🏆 Top Tippers Tonight</h3>
+      <div id="top-tippers-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+    </div>
+
+    <!-- Online People -->
+    <div class="glass-card" style="padding:16px;">
+      <h3 style="font-size:0.9rem;font-weight:700;margin-bottom:12px;">👥 People in the Bar</h3>
+      <div id="online-people" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- AUTH MODAL (shared across inner pages) -->
+<div class="modal-overlay" id="auth-modal">
+  <div class="modal-box">
+    <button class="modal-close" id="modal-close">✕</button>
+    <div class="modal-tabs">
+      <button class="modal-tab active" id="tab-login" onclick="switchTab('login')">Log In</button>
+      <button class="modal-tab" id="tab-register" onclick="switchTab('register')">Register</button>
+    </div>
+    <div id="login-form">
+      <input type="email" class="form-input" id="login-email" placeholder="Email address">
+      <input type="password" class="form-input" id="login-password" placeholder="Password">
+      <button class="btn btn-primary w-full" id="login-btn" style="justify-content:center;">Log In</button>
+    </div>
+    <div id="register-form" class="hidden">
+      <input type="text" class="form-input" id="reg-username" placeholder="Username">
+      <input type="email" class="form-input" id="reg-email" placeholder="Email address">
+      <input type="password" class="form-input" id="reg-password" placeholder="Password">
+      <label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;color:var(--text-secondary);margin-bottom:16px;">
+        <input type="checkbox" id="reg-creator"> I'm a creator / host
+      </label>
+      <button class="btn btn-primary w-full" id="register-btn" style="justify-content:center;">Create My Account</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast-container" id="toast-container"></div>
+
+<script src="script.js"></script>
+<script>window.__DOTSBAR_API_BASE__ = window.__DOTSBAR_API_BASE__ || 'https://dotsbar.onrender.com';</script>
+<script>
+// ── Match data ────────────────────────────────────
+let liveMatches = [];
+
+// ── Ticker ──────────────────────────────────────
+const tickerTrack = document.getElementById('ticker-track');
+
+function updateTicker() {
+  if (!tickerTrack) return;
+  const doubled = [...liveMatches, ...liveMatches];
+  tickerTrack.innerHTML = doubled.map(m => `
+    <div class="ticker-item">
+      <span class="teams">${m.home} vs ${m.away}</span>
+      <span class="score">${m.score}</span>
+      <span class="sep">·</span>
+      <span style="color:var(--crimson);font-size:0.8rem;font-weight:600;">${m.min}'</span>
+    </div>
+  `).join('');
+}
+
+function tickMinutes() {
+  liveMatches.forEach(m => { if (m.min < 90) m.min++; });
+  buildScores();
+  updateTicker();
+}
+setInterval(tickMinutes, 60000);
+
+async function loadLiveMatches() {
+  try {
+    const res = await fetch('/api/matches');
+    const payload = await res.json();
+    if (!payload.matches) return;
+    liveMatches = payload.matches.map((m) => ({
+      home: m.home,
+      homeEmoji: m.homeEmoji || '⚽',
+      away: m.away,
+      awayEmoji: m.awayEmoji || '⚽',
+      score: m.score || '0-0',
+      min: m.min || 0,
+      status: m.status || 'LIVE',
+      league: m.league || 'Premier League'
+    }));
+    buildScores();
+    updateTicker();
+  } catch (error) {
+    console.error('Failed to load live matches:', error);
+  }
+}
+
+// ── Scores Panel ────────────────────────────────
+function buildScores() {
+  const el = document.getElementById('scores-list');
+  if (!el) return;
+  el.innerHTML = liveMatches.map(m => `
+    <div class="score-row" onclick="window.location.href='stream.html'">
+      <div class="team-side">
+        <span class="team-crest-sm">${m.homeEmoji}</span>
+        <span class="team-short">${m.home}</span>
+      </div>
+      <div class="score-center">
+        <div class="score-num">${m.score.replace('-',' - ')}</div>
+        <span class="min-label">🔴 ${m.min}'</span>
+      </div>
+      <div class="team-side right">
+        <span class="team-short">${m.away}</span>
+        <span class="team-crest-sm">${m.awayEmoji}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+loadLiveMatches();
+setInterval(loadLiveMatches, 30000);
+
+// ── Stream Rows ─────────────────────────────────
+const streams = [
+  { emoji:'⚽', title:'Arsenal Watch Party 🔴', host:'RedGunners', viewers:1204, cat:'sports' },
+  { emoji:'🎵', title:'Saturday Night DJ Mix', host:'DJ Kicks', viewers:847, cat:'music' },
+  { emoji:'🧠', title:'Pub Quiz Championship', host:'QuizMasterK', viewers:312, cat:'talk' },
+  { emoji:'📺', title:'Match Reaction & Analysis', host:'FootballNerd', viewers:588, cat:'sports' },
+];
+const sr = document.getElementById('stream-rows');
+if (sr) sr.innerHTML = streams.map(s => `
+  <div class="stream-row" onclick="window.location.href='stream.html'">
+    <div class="stream-thumb-mini">
+      ${s.emoji}
+      <span class="live-badge" style="position:absolute;top:4px;left:4px;font-size:0.55rem;padding:2px 6px;">LIVE</span>
+    </div>
+    <div class="stream-row-info">
+      <div class="stream-row-title">${s.title}</div>
+      <div class="stream-row-sub">
+        <span>👤 ${s.host}</span>
+        <span>👁 ${s.viewers.toLocaleString()}</span>
+        <span class="category-tag ${s.cat}" style="font-size:0.65rem;padding:1px 7px;">${s.cat}</span>
+      </div>
+    </div>
+  </div>
+`).join('');
+
+// ── Jukebox Visualizer ────────────────────────────
+const viz = document.getElementById('visualizer');
+if (viz) {
+  for (let i = 0; i < 10; i++) {
+    const b = document.createElement('div');
+    b.className = 'viz-bar';
+    b.style.animationDelay = `${i*0.08}s`;
+    b.style.height = `${4+Math.random()*16}px`;
+    viz.appendChild(b);
+  }
+}
+
+// ── Chat — Socket.io + fallback ─────────────────────────────────
+const chatEl = document.getElementById('chat-messages');
+const userColors = ['#f59e0b','#7c3aed','#10b981','#ec4899','#3b82f6','#a78bfa','#ef4444'];
+const colorMap = {};
+function getColor(name) {
+  if (!colorMap[name]) colorMap[name] = userColors[Object.keys(colorMap).length % userColors.length];
+  return colorMap[name];
+}
+
+function addMsg(username, message, isOwn = false) {
+  if (!chatEl) return;
+  const col = isOwn ? '#f59e0b' : getColor(username);
+  const initial = username[0].toUpperCase();
+  const d = document.createElement('div');
+  d.className = 'chat-msg' + (isOwn ? ' own-msg' : '');
+  d.innerHTML = `
+    <div class="avatar avatar-sm" style="background:${col};color:#fff;flex-shrink:0;">${initial}</div>
+    <div class="chat-msg-body">
+      <div class="chat-msg-name" style="color:${col};">${username}</div>
+      <div class="chat-msg-text">${escapeHtml(message)}</div>
+    </div>`;
+  chatEl.appendChild(d);
+  chatEl.scrollTop = chatEl.scrollHeight;
+}
+
+function escapeHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Initial chat starts empty, relying on real socket messages.
+let autoTimer = null;
+
+
+// Send chat message
+const sendBtn = document.getElementById('chat-send');
+const chatInput = document.getElementById('chat-input');
+
+function sendMsg() {
+  const v = chatInput.value.trim();
+  if (!v) return;
+  const user = getUser();
+  const name = user?.username || 'Guest';
+  const sock = getSocket();
+  if (sock && sock.connected) {
+    sock.emit('bar-chat', { message: v });
+  } else {
+    // Fallback: show locally
+    addMsg(name, v, true);
+  }
+  chatInput.value = '';
+}
+
+sendBtn?.addEventListener('click', sendMsg);
+chatInput?.addEventListener('keydown', e => { if(e.key==='Enter') sendMsg(); });
+
+// Socket.io chat
+initSocket((sock) => {
+  clearInterval(autoTimer); // Stop auto-messages when socket connected
+
+  sock.on('bar-chat', ({ username, message }) => {
+    const user = getUser();
+    const isOwn = user?.username === username;
+    addMsg(username, message, isOwn);
+  });
+
+  // Tip events from other users
+  sock.on('tip-received', ({ from, amount }) => {
+    addMsg('DotsBar', `💸 ${from} just tipped ${amount} DotsCoins!`);
+  });
+});
+
+// Socket will handle all chat now.
+
+// ── Quick Order ──────────────────────────────────
+const drinks = [
+  { e:'🍺', n:'Guinness Draft', p:120 },
+  { e:'🍹', n:'Neon Spritz', p:200 },
+  { e:'🥃', n:'Smoky Scotch', p:350 },
+  { e:'🧃', n:'Mocktail Mojito', p:80 },
+];
+const qol = document.getElementById('quick-order-list');
+if (qol) qol.innerHTML = drinks.map(d => `
+  <div style="display:flex;align-items:center;justify-content:space-between;background:var(--bg-card2);border-radius:var(--radius-sm);padding:8px 12px;">
+    <span style="font-size:0.85rem;">${d.e} ${d.n}</span>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span style="color:var(--amber);font-size:0.8rem;font-weight:700;">${d.p}🪙</span>
+      <button class="btn btn-primary btn-sm" onclick="addToCart('${d.n}',${d.p})" style="padding:4px 10px;font-size:0.75rem;">+</button>
+    </div>
+  </div>
+`).join('');
+
+// ── Online people ────────────────────────────────
+const ppl = ['RedFan99','DJ_Kicks','BarMaven','LadyVibe','GoalAlert','QuizK','FootyKing','PubLover','VibeCheck','NightOwl','Gooner1886','PintPlease'];
+const opEl = document.getElementById('online-people');
+if (opEl) opEl.innerHTML = ppl.map(p => `
+  <div style="display:flex;align-items:center;gap:6px;background:var(--bg-card2);border-radius:20px;padding:4px 10px;">
+    <div style="width:6px;height:6px;border-radius:50%;background:var(--green);"></div>
+    <span style="font-size:0.75rem;color:var(--text-secondary);">${p}</span>
+  </div>
+`).join('');
+
+// ── Top Tippers Leaderboard ──────────────────────
+async function loadLeaderboard() {
+  try {
+    const res = await fetch('/api/leaderboard');
+    if (!res.ok) return;
+    const data = await res.json();
+    const ttEl = document.getElementById('top-tippers-list');
+    if (ttEl && data.topTippers) {
+      if (data.topTippers.length === 0) {
+        ttEl.innerHTML = '<div style="font-size:0.8rem;color:var(--text-muted);text-align:center;padding:10px;">No tips yet tonight.</div>';
+        return;
+      }
+      ttEl.innerHTML = data.topTippers.map((t, i) => {
+        let emoji = '🍺';
+        if (i === 0) emoji = '🏆';
+        else if (i === 1) emoji = '🥈';
+        else if (i === 2) emoji = '🥉';
+        return `
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:var(--bg-card2);border-radius:var(--radius-sm);">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span style="font-size:1rem;">${emoji}</span>
+      <span style="font-size:0.82rem;font-weight:600;">${t.username}</span>
+    </div>
+    <span style="font-family:'Outfit',sans-serif;font-size:0.8rem;font-weight:700;color:var(--amber);">${(t.totalTipped || 0).toLocaleString()} 🪙</span>
+  </div>`;
+      }).join('');
+    }
+  } catch (err) {
+    console.error('Failed to load leaderboard', err);
+  }
+}
+loadLeaderboard();
+setInterval(loadLeaderboard, 15000);
+
+// ── Cart ──────────────────────────────────────────
+function addToCart(name, price) {
+  if (!spendCoins(price)) {
+    showToast('Not enough DotsCoins! Visit the Shop to top up.', 'error');
+    return;
+  }
+  const cart = JSON.parse(localStorage.getItem('cart')||'[]');
+  cart.push({name,price});
+  localStorage.setItem('cart', JSON.stringify(cart));
+  showToast(`${name} ordered! 🍺 (${price}🪙 spent)`, 'success');
+}
+
+// ── Ad rotation ───────────────────────────────────
+const ads = [
+  { emoji:'🍺', h:'Guinness — Made of More', p:'The official drink of DotsBar. Order yours.', link:'marketplace.html' },
+  { emoji:'🍹', h:'Neon Spritz — New Drop', p:'Limited edition cocktail of the month. Try it!', link:'marketplace.html' },
+  { emoji:'🏟️', h:'Premier League on DotsBar', p:'Watch every match LIVE with 12K+ fans.', link:'bar.html' },
+  { emoji:'🎫', h:'DJ Kicks — Sat 22nd Apr', p:'Tickets selling fast for the biggest set of 2026.', link:'events.html' },
+];
+let adIdx = 0;
+function rotateAd() {
+  const a = ads[adIdx % ads.length]; adIdx++;
+  const b = document.getElementById('ad-banner');
+  if (!b) return;
+  b.style.opacity = 0;
+  setTimeout(() => {
+    b.innerHTML = `
+      <div class="ad-brand">
+        <div class="ad-logo">${a.emoji}</div>
+        <div class="ad-text"><h3>${a.h}</h3><p>${a.p}</p></div>
+      </div>
+      <a href="${a.link}" class="btn btn-primary btn-sm ad-cta">View Now</a>
+    `;
+    b.style.opacity = 1;
+  }, 400);
+}
+setInterval(rotateAd, 8000);
+
+// ── Toast ─────────────────────────────────────────
+function showToast(msg, type='info') {
+  showGlobalToast(msg, type);
+}
+
+// ── Auth Modal (shared logic) ─────────────────────
+(function initAuthModal() {
+  const modal = document.getElementById('auth-modal');
+  if (!modal) return;
+
+  function switchTab(tab) {
+    document.getElementById('tab-login').classList.toggle('active', tab === 'login');
+    document.getElementById('tab-register').classList.toggle('active', tab === 'register');
+    document.getElementById('login-form').classList.toggle('hidden', tab !== 'login');
+    document.getElementById('register-form').classList.toggle('hidden', tab !== 'register');
+  }
+  window.switchTab = switchTab;
+
+  document.getElementById('modal-close')?.addEventListener('click', () => modal.classList.remove('open'));
+  modal.addEventListener('click', e => { if (e.target === modal) modal.classList.remove('open'); });
+
+  document.getElementById('login-btn')?.addEventListener('click', async () => {
+    const email    = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value;
+    const btn      = document.getElementById('login-btn');
+    if (!email || !password) { showToast('Please enter email and password', 'error'); return; }
+    btn.textContent = 'Logging in…'; btn.disabled = true;
+    try {
+      const r = await fetch('/api/auth/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({email,password}) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Login failed');
+      localStorage.setItem('token', d.token);
+      localStorage.setItem('user', JSON.stringify(d.user));
+      modal.classList.remove('open');
+      showToast(`Welcome back, ${d.user.username}! 🍺`, 'success');
+      setTimeout(() => window.location.reload(), 800);
+    } catch(e) { showToast(e.message || 'Login failed', 'error'); btn.textContent = 'Log In'; btn.disabled = false; }
+  });
+
+  document.getElementById('register-btn')?.addEventListener('click', async () => {
+    const username  = document.getElementById('reg-username').value.trim();
+    const email     = document.getElementById('reg-email').value.trim();
+    const password  = document.getElementById('reg-password').value;
+    const isCreator = document.getElementById('reg-creator').checked;
+    const btn       = document.getElementById('register-btn');
+    if (!username || !email || !password) { showToast('Please fill in all fields', 'error'); return; }
+    if (password.length < 6) { showToast('Password must be at least 6 characters', 'error'); return; }
+    btn.textContent = 'Creating account…'; btn.disabled = true;
+    try {
+      const r = await fetch('/api/auth/register', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({username,email,password,isCreator}) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Registration failed');
+      localStorage.setItem('token', d.token);
+      localStorage.setItem('user', JSON.stringify(d.user));
+      modal.classList.remove('open');
+      showToast(`Welcome to DotsBar, ${d.user.username}! 🎉`, 'success');
+      setTimeout(() => window.location.reload(), 800);
+    } catch(e) { showToast(e.message || 'Registration failed', 'error'); btn.textContent = 'Create My Account'; btn.disabled = false; }
+  });
+
+  document.getElementById('login-password')?.addEventListener('keydown', e => { if(e.key==='Enter') document.getElementById('login-btn')?.click(); });
+  document.getElementById('reg-password')?.addEventListener('keydown', e => { if(e.key==='Enter') document.getElementById('register-btn')?.click(); });
+})();
+</script>
+</body>
+</html>

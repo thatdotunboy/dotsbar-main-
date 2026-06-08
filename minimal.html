@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>DotsBar Minimal</title>
+  <style>
+    :root { --amber:#1976d2; --bg:#0b0b14; --card:#111122; --text:#f1f5f9; --muted:#94a3b8; }
+    body { margin:0; font-family: Arial, sans-serif; background: var(--bg); color: var(--text); }
+    header { padding:16px 20px; border-bottom:1px solid rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:space-between; }
+    a { color: var(--amber); text-decoration:none; }
+    main { max-width: 980px; margin: 0 auto; padding: 18px 20px 60px; }
+    .grid { display:grid; grid-template-columns: 1fr 320px; gap: 16px; }
+    @media (max-width:900px){ .grid{ grid-template-columns: 1fr; } }
+    .card { background: var(--card); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:14px; }
+    h1 { font-size:18px; margin:0; }
+    .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    input, button { border-radius:10px; padding:10px 12px; }
+    input { flex:1; min-width: 180px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.10); color: var(--text); }
+    button { border: none; background: var(--amber); color:#000; font-weight:700; cursor:pointer; }
+    button:disabled { opacity:0.6; cursor:not-allowed; }
+    #rooms { display:flex; flex-direction:column; gap:8px; }
+    .room { border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:10px; background: rgba(255,255,255,0.02); }
+    .room button { margin-left:auto; }
+    #chat { height: 360px; overflow:auto; padding:10px; background: rgba(0,0,0,0.25); border-radius:10px; }
+    .msg { margin: 8px 0; font-size: 13px; }
+    .msg b { color: var(--amber); }
+    .muted { color: var(--muted); font-size: 12px; }
+    .pill { padding:6px 10px; border-radius:999px; border:1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.03); }
+    .hidden{ display:none; }
+    .toast{ position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:#000; color:#fff; padding:10px 14px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>DotsBar Minimal</h1>
+    <div class="row">
+      <span class="pill" id="conn">offline</span>
+      <a href="/">home</a>
+    </div>
+  </header>
+
+  <main>
+    <div class="grid">
+      <div>
+        <div class="card" style="margin-bottom:14px;">
+          <div class="row" style="justify-content:space-between;">
+            <div>
+              <div class="muted">Create or join a room, then chat.</div>
+            </div>
+            <div class="muted">Auth: <span id="authState">localStorage</span></div>
+          </div>
+          <div class="row" style="margin-top:10px;">
+            <input id="roomName" placeholder="Room name" />
+            <input id="roomDesc" placeholder="Description" style="max-width:320px;" />
+            <button id="createRoom">Create</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="row" style="justify-content:space-between; margin-bottom:10px;">
+            <div><b>Rooms</b></div>
+            <div class="muted"><span id="roomsCount">0</span> available</div>
+          </div>
+          <div id="rooms"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="row" style="justify-content:space-between; margin-bottom:10px;">
+          <div><b id="roomTitle">Pick a room</b></div>
+          <div class="muted" id="viewerCount">viewers: 0</div>
+        </div>
+
+        <div id="chat" aria-live="polite"></div>
+
+        <div class="row" style="margin-top:10px;">
+          <input id="msgInput" placeholder="Type message" maxlength="200" />
+          <button id="sendBtn">Send</button>
+        </div>
+
+        <div class="row" style="margin-top:10px;">
+          <button id="joinBtn" style="flex:1;" disabled>Join</button>
+          <button id="leaveBtn" style="flex:1; background:#2b2b4a" disabled>Leave</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const API_BASE = (window.__DOTSBAR_API_BASE__) ? window.__DOTSBAR_API_BASE__ : (location.origin);
+    // socket.io client
+    (function loadSocketIO(){
+      const s = document.createElement('script');
+      s.src = API_BASE.replace(/\/$/, '') + '/socket.io/socket.io.js';
+      s.onload = () => main();
+      s.onerror = () => {
+        toast('Socket.io not reachable');
+        document.getElementById('conn').textContent = 'offline';
+      };
+      document.head.appendChild(s);
+    })();
+
+    let socket = null;
+    let selectedRoomId = null;
+    let roomJoined = false;
+
+    function toast(msg){
+      const t = document.createElement('div');
+      t.className = 'toast';
+      t.textContent = msg;
+      document.body.appendChild(t);
+      setTimeout(()=>t.remove(), 2000);
+    }
+
+    function getToken(){ return localStorage.getItem('token'); }
+    function getUser(){ try { return JSON.parse(localStorage.getItem('user')||'null'); } catch { return null; } }
+
+    const roomsEl = document.getElementById('rooms');
+    const roomsCountEl = document.getElementById('roomsCount');
+    const roomTitleEl = document.getElementById('roomTitle');
+    const viewerCountEl = document.getElementById('viewerCount');
+
+    const roomNameEl = document.getElementById('roomName');
+    const roomDescEl = document.getElementById('roomDesc');
+    const createRoomBtn = document.getElementById('createRoom');
+
+    const joinBtn = document.getElementById('joinBtn');
+    const leaveBtn = document.getElementById('leaveBtn');
+
+    const chatEl = document.getElementById('chat');
+    const msgInput = document.getElementById('msgInput');
+    const sendBtn = document.getElementById('sendBtn');
+
+    function setAuthState(){
+      const u = getUser();
+      document.getElementById('authState').textContent = u ? u.username : 'not logged in';
+    }
+
+    async function loadRooms(){
+      const r = await fetch(API_BASE + '/api/rooms');
+      const j = await r.json();
+      const list = j.rooms || [];
+      roomsCountEl.textContent = list.length;
+      roomsEl.innerHTML = '';
+      list.forEach(room => {
+        const div = document.createElement('div');
+        div.className = 'room';
+        div.innerHTML = `
+          <div style="display:flex; gap:10px; align-items:flex-start;">
+            <div style="flex:1;">
+              <div style="font-weight:800; font-size:14px; margin-bottom:2px;">${room.name}</div>
+              <div class="muted">${room.creator || 'Unknown'} · viewers: ${room.viewerCount ?? 0}</div>
+            </div>
+            <button type="button" style="padding:8px 10px;" data-id="${room.id}">Select</button>
+          </div>
+        `;
+        div.querySelector('button').addEventListener('click', () => selectRoom(room.id, room.name));
+        roomsEl.appendChild(div);
+      });
+    }
+
+    function selectRoom(id, name){
+      selectedRoomId = id;
+      roomTitleEl.textContent = name;
+      joinBtn.disabled = !id || roomJoined;
+      leaveBtn.disabled = !roomJoined;
+      chatEl.innerHTML = '';
+    }
+
+    async function createRoom(){
+      const token = getToken();
+      if (!token) { toast('Login required to create room'); return; }
+      const name = roomNameEl.value.trim();
+      const description = roomDescEl.value.trim();
+      if (!name) { toast('Room name required'); return; }
+      const r = await fetch(API_BASE + '/api/rooms', {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer ' + token },
+        body: JSON.stringify({ name, description })
+      });
+      const j = await r.json().catch(()=>({}));
+      if (!r.ok) { toast(j.error || 'Failed to create room'); return; }
+      roomNameEl.value=''; roomDescEl.value='';
+      await loadRooms();
+      toast('Room created');
+    }
+
+    function appendMsg(username, message){
+      const d = document.createElement('div');
+      d.className = 'msg';
+      d.innerHTML = `<b>${username}</b>: ${escapeHtml(message)}`;
+      chatEl.appendChild(d);
+      chatEl.scrollTop = chatEl.scrollHeight;
+    }
+
+    function escapeHtml(str){
+      return String(str).replace(/&/g,'&amp;').replace(/</g,'<').replace(/>/g,'>');
+    }
+
+    function connectSocket(){
+      socket = io(API_BASE, { transports:['websocket','polling'] });
+      socket.on('connect', () => {
+        document.getElementById('conn').textContent = 'connected';
+        const t = getToken();
+        if (t) socket.emit('auth', t);
+      });
+      socket.on('viewer-count', ({ roomId, count }) => {
+        if (roomId === selectedRoomId) viewerCountEl.textContent = 'viewers: ' + count;
+      });
+      socket.on('chat-message', ({ username, message }) => {
+        if (roomJoined) appendMsg(username || 'Guest', message || '');
+      });
+      socket.on('tip-received', ({ from, amount }) => {
+        if (roomJoined) appendMsg('DotsBar', `💸 ${from} tipped ${amount} DotsCoins`);
+      });
+    }
+
+    function joinRoom(){
+      if (!selectedRoomId) { toast('Select a room'); return; }
+      if (!socket) { toast('Socket not ready'); return; }
+      if (roomJoined) return;
+      socket.emit('join-room', selectedRoomId);
+      roomJoined = true;
+      joinBtn.disabled = true;
+      leaveBtn.disabled = false;
+      toast('Joined');
+      chatEl.innerHTML = '';
+    }
+
+    function leaveRoom(){
+      if (!socket || !roomJoined) return;
+      socket.emit('leave-room', selectedRoomId);
+      roomJoined = false;
+      joinBtn.disabled = false;
+      leaveBtn.disabled = true;
+      toast('Left');
+    }
+
+    sendBtn.addEventListener('click', () => {
+      const v = msgInput.value.trim();
+      if (!v || !socket || !roomJoined) return;
+      socket.emit('chat-message', { roomId: selectedRoomId, message: v });
+      msgInput.value='';
+    });
+    msgInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') sendBtn.click(); });
+
+    joinBtn.addEventListener('click', joinRoom);
+    leaveBtn.addEventListener('click', leaveRoom);
+    createRoomBtn.addEventListener('click', createRoom);
+
+    async function main(){
+      setAuthState();
+      connectSocket();
+      await loadRooms();
+      // enable join if a room selected
+    }
+  </script>
+</body>
+</html>
+
