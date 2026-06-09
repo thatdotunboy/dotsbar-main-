@@ -16,6 +16,7 @@ const INITIAL_USE_FIRESTORE = Boolean(
   process.env.GOOGLE_APPLICATION_CREDENTIALS
 );
 let useFirestore = INITIAL_USE_FIRESTORE;
+let mongoReady = false;
 
 // Fix for Node 18+ fetch failed on Windows
 const dns = require('dns');
@@ -97,6 +98,10 @@ app.post('/api/auth/register', async (req, res) => {
     const { username, email, password, isCreator } = req.body;
     if (!username || !email || !password) return res.status(400).json({ error: 'All fields required' });
 
+    if (!useFirestore && !mongoReady) {
+      return res.status(503).json({ error: 'Database unavailable. Please try again later.' });
+    }
+
     if (useFirestore) {
       const existing = await firestoreService.findUserByEmail(email);
       if (existing) return res.status(400).json({ error: 'Email already registered' });
@@ -151,6 +156,10 @@ app.post('/api/auth/register', async (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
+
+    if (!useFirestore && !mongoReady) {
+      return res.status(503).json({ error: 'Database unavailable. Please try again later.' });
+    }
 
     if (useFirestore) {
       const user = await firestoreService.findUserByEmail(email);
@@ -637,7 +646,7 @@ if (!process.env.VERCEL) {
 const PORT = process.env.PORT || 3001;
 
 async function startService() {
-  let mongoReady = false;
+  mongoReady = false;
 
   if (INITIAL_USE_FIRESTORE) {
     const initResult = initializeFirebase();

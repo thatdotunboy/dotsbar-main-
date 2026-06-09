@@ -2,11 +2,20 @@
 require('dotenv').config();
 const mongoose = require('mongoose');
 
+mongoose.set('bufferCommands', false);
+
 let MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/dotsbar';
 
 const connectDB = async () => {
   try {
-    await mongoose.connect(MONGODB_URI);
+    await mongoose.connect(MONGODB_URI, {
+      serverSelectionTimeoutMS: 5000,
+      connectTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+      family: 4,
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
     console.log('✅ MongoDB connected');
     return true;
   } catch (err) {
