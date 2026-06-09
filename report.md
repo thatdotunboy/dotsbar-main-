@@ -127,22 +127,87 @@ DotsBar currently offers a **bare‑bones** subset of functionality. To compete,
 
 | Priority | Milestone | Tasks |
 |----------|-----------|-------|
-| **P0 – Core stability** | Secure auth & basic tests | • Replace hard‑coded JWT secret<br>• Add rate limiting & input validation<br>• Write unit tests for auth routes (Jest) |
-| **P1 – UI/UX overhaul** | Premium front‑end | • Migrate to a component framework (React/Vite) or modern vanilla JS with CSS design system (dark mode, glassmorphism).<br>• Generate mockup images (see attached).<br>• Implement responsive mobile layout. |
-| **P2 – Voice chat** | Full WebRTC integration | • Deploy TURN/STUN server (coturn).<br>• Build UI controls for mute/unmute, speaker selection.<br>• Add server‑side signalling via Socket.io (already present). |
-| **P3 – Persistence & scaling** | Horizontal scaling | • Store rooms in Redis; enable Redis adapter for Socket.io.<br>• Add MongoDB indexes, migrate room state to DB.<br>• Docker multi‑stage build + Kubernetes manifest (optional). |
-| **P4 – Monetisation** | Payments & NFTs | • Integrate Stripe for purchases/tips.<br>• Add commission logic to marketplace.<br>• Implement NFT minting via OpenSea SDK. |
-| **P5 – Analytics & Admin** | Operations tooling | • Build admin dashboard (metrics, user ban, product management).<br>• Add Prometheus metrics for API latency, socket connections. |
+| **P0 – Core stability** | Secure auth & testing | • Remove fallback secrets; require `JWT_SECRET`.<br>• Add request validation for auth, rooms, tips.<br>• Add Jest + Supertest coverage for critical routes. |
+| **P1 – Persistence** | DB-backed rooms & products | • Persist rooms, events, and products in MongoDB.<br>• Include `creatorId`, `viewerCount`, `tipsTotal` in room metadata.<br>• Migrate in-memory catalog to DB. |
+| **P2 – Realtime quality** | Room presence & WebRTC | • Improve Socket.io join/leave lifecycle.<br>• Add TURN/STUN support and robust peer cleanup.<br>• Sanitize chat and persist recent room messages. |
+| **P3 – Monetisation** | Wallet + tipping | • Add Stripe wallet top-up and webhook credit flow.<br>• Implement real tip transfer with balance updates.<br>• Add DB-persisted purchase and order flows. |
+| **P4 – Scalability** | Production readiness | • Add Redis adapter for Socket.io.<br>• Add `/health` endpoint and service metrics.<br>• Introduce Docker healthcheck and load test baseline. |
+| **P5 – UX & growth** | Polished launch experience | • Refresh responsive UI for rooms and marketplace.<br>• Add creator discovery, premium room labels, and sports widgets.<br>• Improve notifications and onboarding. |
 
 ---
 
-## 11. Next‑Steps Checklist
+## 11. Launch Plan
 
-- [ ] Confirm target business model (SaaS vs. demo).  
-- [ ] Choose primary competitor set for deeper benchmark (Discord, Streamlabs, OpenSea).  
-- [ ] Approve UI redesign direction (dark mode, glassmorphism).  
-- [ ] Set deadline for MVP of voice‑chat integration.  
-- [ ] Allocate budget/resources for payment gateway integration.  
+### Release 1: MVP foundation
+- Persist rooms, room chat, and marketplace state.
+- Harden auth, validation, and environment configuration.
+- Add basic test coverage for auth and room flows.
+- Keep the initial product focused on reliable room access, safe chat, and creator tipping.
+
+### Release 2: Real-time experience
+- Stabilize Socket.io presence and room lifecycle.
+- Make voice/video usable with TURN/STUN and remote stream cleanup.
+- Add accurate viewer counts and creator metadata.
+- Ensure live sports data is delivered with graceful fallback.
+
+### Release 3: Monetisation launch
+- Add Stripe-based wallet top-up.
+- Implement real tip transfers and creator balances.
+- Move marketplace products to DB and add checkout/order history.
+- Add basic product management endpoints.
+
+### Release 4: Scale and operations
+- Enable Redis adapter for Socket.io sharding.
+- Add health checks, metrics, and deployment safety.
+- Run a documented load-testing benchmark.
+
+### Release 5: Product polish
+- Build responsive and mobile-friendly UI.
+- Add discovery for creators and premium rooms.
+- Improve notification UX and onboarding guidance.
+
+---
+
+## 12. Recommended Product Backlog
+
+### Release 1 backlog
+- Persist rooms in MongoDB with creator metadata.
+- Persist chat messages and room state.
+- Enforce required environment variables.
+- Add validation for API requests.
+- Add Jest/Supertest tests for auth and room APIs.
+
+### Release 2 backlog
+- Fix Socket.io room join/leave counts.
+- Add TURN/STUN support and peer cleanup.
+- Sanitize chat messages and render safely.
+- Display creator names and room viewer counts.
+
+### Release 3 backlog
+- Add Stripe wallet top-up and webhook handling.
+- Implement tip transfers with balance updates.
+- Store marketplace products in DB.
+- Add purchase endpoint and order history.
+
+### Release 4 backlog
+- Add Redis-backed Socket.io adapter.
+- Add `/health` endpoint and basic metrics.
+- Create Docker healthcheck and load test report.
+
+### Release 5 backlog
+- Improve responsive room and marketplace UI.
+- Add premium room discovery and filters.
+- Deliver live match widgets with provider data.
+- Improve feedback and notification UX.
+
+---
+
+## 13. Next Steps
+
+- Decide whether the first paid release is a creator tipping platform or a sports social lounge.
+- Align on “must-have MVP” features from Release 1 and Release 2.
+- Create an implementation board or issue tracker from this backlog.
+- Execute the first sprint on core persistence and auth hardening.
 
 ---
 

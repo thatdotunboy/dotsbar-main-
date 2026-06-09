@@ -5,7 +5,17 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const db = require('./config/database');
+const { initializeFirebase, getFirestore } = require('./firebase');
+const firestoreService = require('./firestore-service');
 const mongoose = require('mongoose');
+
+const INITIAL_USE_FIRESTORE = Boolean(
+  process.env.useFirestore === '1' ||
+  process.env.FIREBASE_SERVICE_ACCOUNT_PATH ||
+  process.env.FIREBASE_SERVICE_ACCOUNT ||
+  process.env.GOOGLE_APPLICATION_CREDENTIALS
+);
+let useFirestore = INITIAL_USE_FIRESTORE;
 
 // Fix for Node 18+ fetch failed on Windows
 const dns = require('dns');
@@ -37,24 +47,14 @@ const SPORTS_SEASON = process.env.SPORTS_SEASON || '2025';
 const User = require('./models/User');
 const Room = require('./models/Room');
 const Event = require('./models/Event');
-const Product = require('./models/Product');
 const ChatMessage = require('./models/ChatMessage');
+const Announcement = require('./models/Announcement');
+
+
 const PushSubscription = require('./models/PushSubscription');
 
-const products = [
-  { id:1, name:'Guinness Draft', emoji:'🍺', image:'images/Guinness Draft.jpg', desc:'The classic. Cold, dark & smooth.', price:120, cat:'drinks', badge:'Best Seller' },
-  { id:2, name:'Heineken Bottle', emoji:'🍶', image:'images/Heineken Bottle.jpg', desc:'Crisp & refreshing lager.', price:100, cat:'drinks' },
-  { id:3, name:'Craft IPA', emoji:'🍻', image:'images/Craft IPA.jpg', desc:'Hoppy, bold, and local.', price:130, cat:'drinks' },
-  { id:4, name:'Neon Spritz', emoji:'🍹', image:'images/Neon Spritz.jpg', desc:'Pink, fizzy, legendary.', price:200, cat:'cocktails', badge:'Fan Fave' },
-  { id:5, name:'Mojito', emoji:'🌿', image:'images/Mojito.jpg', desc:'Mint, lime, perfection.', price:180, cat:'cocktails' },
-  { id:6, name:'Smoky Scotch', emoji:'🥃', image:'images/Smoky Scotch.jpg', desc:'Highland single malt.', price:350, cat:'shots', badge:'Premium' },
-  { id:7, name:'Tequila Shot', emoji:'🍋', image:'images/Tequila Shot.jpg', desc:'Salt. Shot. Lime. Repeat.', price:150, cat:'shots' },
-  { id:8, name:'Loaded Nachos', emoji:'🧀', image:'images/Loaded Nachos.jpg', desc:'Cheese, jalapeño, guacamole.', price:150, cat:'food' },
-  { id:9, name:'Chicken Wings', emoji:'🍗', image:'images/Chicken Wings.jpg', desc:'Sticky BBQ glazed wings.', price:200, cat:'food', badge:'Match Day' },
-  { id:10, name:'DotsBar Tee', emoji:'👕', desc:'Official DotsBar streetwear.', price:800, cat:'merch', badge:'Limited' },
-  { id:11, name:'Gold Pint Badge', emoji:'🏅', desc:'Exclusive collector badge.', price:500, cat:'collectibles', badge:'Rare' },
-  { id:12, name:'Match Day Trophy NFT', emoji:'🏆', desc:'Limited edition match day drop.', price:1000, cat:'collectibles', badge:'Ultra Rare' },
-];
+// Marketplace removed (virtual drinks / NFTs / collectibles / metaverse shop)
+
 
 // Live Premier League match stubs (rotate scores over time for realism)
 let matchMinutes = { 0: 72, 1: 34, 2: 58, 3: 81, 4: 45, 5: 22 };
@@ -96,6 +96,31 @@ app.post('/api/auth/register', async (req, res) => {
   try {
     const { username, email, password, isCreator } = req.body;
     if (!username || !email || !password) return res.status(400).json({ error: 'All fields required' });
+
+    if (useFirestore) {
+      const existing = await firestoreService.findUserByEmail(email);
+      if (existing) return res.status(400).json({ error: 'Email already registered' });
+      const hashedPassword = await bcrypt.hash(password, 12);
+      const newUser = await firestoreService.createUser({
+        username,
+        email,
+        password: hashedPassword,
+        isCreator: isCreator || false,
+        balance: 0
+      });
+      const token = jwt.sign({ id: newUser.id, username: newUser.username }, JWT_SECRET, { expiresIn: '7d' });
+      return res.json({
+        token,
+        user: {
+          id: newUser.id,
+          username: newUser.username,
+          email: newUser.email,
+          isCreator: newUser.isCreator,
+          balance: newUser.balance
+        }
+      });
+    }
+
     // Check if email already exists
     const existing = await User.findOne({ email });
     if (existing) return res.status(400).json({ error: 'Email already registered' });
@@ -126,6 +151,16 @@ app.post('/api/auth/register', async (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
+
+    if (useFirestore) {
+      const user = await firestoreService.findUserByEmail(email);
+      if (!user || !(await bcrypt.compare(password, user.password))) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+      const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
+      return res.json({ token, user: { id: user.id, username: user.username, email: user.email, isCreator: user.isCreator, balance: user.balance } });
+    }
+
     const user = await User.findOne({ email });
     if (!user || !(await bcrypt.compare(password, user.password))) {
       return res.status(401).json({ error: 'Invalid credentials' });
@@ -141,8 +176,29 @@ app.get('/api/ping', (req, res) => {
   res.json({ ok: true, message: 'DotsBar API is healthy' });
 });
 
+app.get('/api/firebase-health', async (req, res) => {
+  const firestore = getFirestore();
+  if (!firestore) {
+    return res.status(503).json({ ok: false, error: 'Firebase is not configured' });
+  }
+
+  try {
+    const now = new Date().toISOString();
+    await firestore.collection('_health').doc('ping').set({ updatedAt: now }, { merge: true });
+    res.json({ ok: true, updatedAt: now });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
 app.get('/api/profile/:id', verifyToken, async (req, res) => {
   try {
+    if (useFirestore) {
+      const user = await firestoreService.findUserById(req.params.id);
+      if (!user) return res.status(404).json({ error: 'User not found' });
+      return res.json({ id: user.id, username: user.username, email: user.email, isCreator: user.isCreator, balance: user.balance, createdAt: user.createdAt });
+    }
+
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
     res.json({ id:user._id, username:user.username, email:user.email, isCreator:user.isCreator, balance:user.balance, createdAt:user.createdAt });
@@ -154,10 +210,17 @@ app.get('/api/profile/:id', verifyToken, async (req, res) => {
 app.put('/api/profile', verifyToken, async (req, res) => {
   try {
     const { username, bio } = req.body;
-    const update = {};
-    if (username) update.username = username;
-    if (bio) update['profile.bio'] = bio;
-    const user = await User.findByIdAndUpdate(req.user.id, update, { new: true });
+    const updates = {};
+    if (username) updates.username = username;
+    if (bio) updates.profile = { bio };
+
+    if (useFirestore) {
+      const user = await firestoreService.updateUser(req.user.id, updates);
+      if (!user) return res.status(404).json({ error: 'User not found' });
+      return res.json({ id: user.id, username: user.username, email: user.email, isCreator: user.isCreator, balance: user.balance });
+    }
+
+    const user = await User.findByIdAndUpdate(req.user.id, updates, { new: true });
     if (!user) return res.status(404).json({ error: 'User not found' });
     res.json({ id:user._id, username:user.username, email:user.email, isCreator:user.isCreator, balance:user.balance });
   } catch (error) {
@@ -238,20 +301,52 @@ app.get('/api/matches', async (req, res) => {
 });
 
 // ── Events API ─────────────────────────────────────
-app.get('/api/events', (req, res) => {
-  res.json({ events, total: events.length });
+app.get('/api/events', async (req, res) => {
+  try {
+    if (useFirestore) {
+      const eventsList = await firestoreService.getEvents();
+      return res.json({ events: eventsList, total: eventsList.length });
+    }
+    res.json({ events, total: events.length });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
 });
 
-app.get('/api/events/live', (req, res) => {
-  const liveEvents = events.filter(e => e.live);
-  res.json({ events: liveEvents, total: liveEvents.length });
+app.get('/api/events/live', async (req, res) => {
+  try {
+    if (useFirestore) {
+      const liveEvents = await firestoreService.getLiveEvents();
+      return res.json({ events: liveEvents, total: liveEvents.length });
+    }
+    const liveEvents = events.filter(e => e.live);
+    res.json({ events: liveEvents, total: liveEvents.length });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
 });
 
 app.post('/api/events', verifyToken, async (req, res) => {
   try {
     const { title, category, datetime, type, price } = req.body;
     if (!title) return res.status(400).json({ error: 'Title is required' });
-    const user = await User.findById(req.user.id);
+    const user = useFirestore ? await firestoreService.findUserById(req.user.id) : await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ error: 'Host user not found' });
+
+    if (useFirestore) {
+      const event = await firestoreService.createEvent({
+        title,
+        host: user.username || 'Anonymous',
+        hostId: req.user.id,
+        category: category || 'general',
+        datetime: datetime || new Date().toISOString(),
+        type: type || 'Free',
+        price: price || 0
+      });
+      io?.emit?.('new-event', event);
+      return res.json(event);
+    }
+
     const event = {
       id: Date.now().toString(),
       title,
@@ -273,23 +368,83 @@ app.post('/api/events', verifyToken, async (req, res) => {
   }
 });
 
-app.delete('/api/events/:id', verifyToken, (req, res) => {
+app.delete('/api/events/:id', verifyToken, async (req, res) => {
+  if (useFirestore) {
+    return res.status(501).json({ error: 'Event deletion not implemented for Firestore yet' });
+  }
   const idx = events.findIndex(e => e.id === req.params.id && e.hostId === req.user.id);
   if (idx === -1) return res.status(404).json({ error: 'Event not found or not authorised' });
   events.splice(idx, 1);
   res.json({ success: true });
 });
 
-// ── Products / Marketplace ─────────────────────────
-app.get('/api/products', (req, res) => {
-  const { cat } = req.query;
-  const filtered = cat ? products.filter(p => p.cat === cat) : products;
-  res.json({ products: filtered, total: filtered.length });
+// ── Member Directory + Announcements ────────────────
+
+app.get('/api/directory', async (req, res) => {
+  try {
+    if (useFirestore) {
+      const users = await firestoreService.getDirectory();
+      return res.json({ users });
+    }
+    const users = await User.find().select('username isCreator').limit(200);
+    res.json({ users: users.map(u => ({ id: u._id, username: u.username, isCreator: u.isCreator })) });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.get('/api/announcements', async (req, res) => {
+  try {
+    if (useFirestore) {
+      const announcements = await firestoreService.getAnnouncements();
+      return res.json({ announcements });
+    }
+    const announcements = await Announcement.find().sort({ createdAt: -1 }).limit(100);
+    res.json({ announcements });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.post('/api/announcements', verifyToken, async (req, res) => {
+  try {
+    const { title, body } = req.body;
+    if (!title || !body) return res.status(400).json({ error: 'title and body are required' });
+
+    const user = useFirestore ? await firestoreService.findUserById(req.user.id) : await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    if (useFirestore) {
+      const ann = await firestoreService.createAnnouncement({
+        title,
+        body,
+        author: user.username || 'Unknown',
+        authorId: req.user.id
+      });
+      return res.json({ announcement: ann });
+    }
+
+    const ann = await Announcement.create({
+      title: String(title).slice(0, 80),
+      body: String(body).slice(0, 2000),
+      author: user?.username || 'Unknown',
+      authorId: req.user.id
+    });
+
+    res.json({ announcement: ann });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
 });
 
 // ── Leaderboard ────────────────────────────────────
+
 app.get('/api/leaderboard', async (req, res) => {
   try {
+    if (useFirestore) {
+      const topTippers = await firestoreService.getLeaderboard();
+      return res.json({ topTippers });
+    }
     const topTippers = await User.find().sort({ totalTipped: -1 }).limit(10).select('username totalTipped');
     res.json({ topTippers });
   } catch (error) {
@@ -298,9 +453,13 @@ app.get('/api/leaderboard', async (req, res) => {
 });
 
 // ── Rooms ──────────────────────────────────────────
-app.post('/api/rooms', verifyToken, (req, res) => {
+app.post('/api/rooms', verifyToken, async (req, res) => {
   try {
     const { name, description } = req.body;
+    if (useFirestore) {
+      const room = await firestoreService.createRoom({ name, description, creatorId: req.user.id });
+      return res.json(room);
+    }
     const room = {
       id: Date.now().toString(), name, description,
       creatorId: req.user.id, viewers: [], chatMessages: [], tipsTotal: 0,
@@ -315,6 +474,10 @@ app.post('/api/rooms', verifyToken, (req, res) => {
 
 app.get('/api/rooms', async (req, res) => {
   try {
+    if (useFirestore) {
+      const list = await firestoreService.getRooms();
+      return res.json({ rooms: list, total: list.length });
+    }
     const list = await Promise.all(rooms.map(async r => {
       const creatorDoc = await User.findById(r.creatorId);
       return {
@@ -396,13 +559,16 @@ if (!process.env.VERCEL) {
     });
 
     // Chat
-    socket.on('chat-message', ({ roomId, message }) => {
+    socket.on('chat-message', async ({ roomId, message }) => {
       const user = socketUsers.get(socket.id) || { username: 'Anonymous' };
       const msg = { username: user.username, message, timestamp: new Date().toISOString(), socketId: socket.id };
       io.to(roomId).emit('chat-message', msg);
-      // Persist in room
-      const room = rooms.find(r => r.name === roomId || r.id === roomId);
-      if (room) room.chatMessages.push(msg);
+      if (useFirestore) {
+        await firestoreService.addRoomChatMessage(roomId, msg);
+      } else {
+        const room = rooms.find(r => r.name === roomId || r.id === roomId);
+        if (room) room.chatMessages.push(msg);
+      }
     });
 
     // Global bar chat
@@ -420,21 +586,31 @@ if (!process.env.VERCEL) {
     // Tip
     socket.on('tip', async ({ roomId, amount, creatorId }) => {
       try {
-        const fromUserDoc = await User.findById(socketUsers.get(socket.id)?.id);
-        const toUserDoc = await User.findById(creatorId);
+        const fromUserDoc = useFirestore ? await firestoreService.findUserById(socketUsers.get(socket.id)?.id) : await User.findById(socketUsers.get(socket.id)?.id);
+        const toUserDoc = useFirestore ? await firestoreService.findUserById(creatorId) : await User.findById(creatorId);
         if (!fromUserDoc || !toUserDoc) {
           return socket.emit('error', 'User not found');
         }
-        if (fromUserDoc.balance >= amount) {
-          fromUserDoc.balance -= amount;
-          toUserDoc.balance += amount;
-          fromUserDoc.totalTipped = (fromUserDoc.totalTipped || 0) + amount;
-          await fromUserDoc.save();
-          await toUserDoc.save();
-          const room = rooms.find(r => r.id === roomId);
-          if (room) room.tipsTotal += amount;
-          io.to(roomId).emit('tip-received', { from: fromUserDoc.username, amount, creatorId });
-          socket.emit('tip-sent', { amount, newBalance: fromUserDoc.balance });
+        const currentBalance = Number(fromUserDoc.balance || 0);
+        const tipAmount = Number(amount || 0);
+        if (currentBalance >= tipAmount && tipAmount > 0) {
+          if (useFirestore) {
+            await firestoreService.changeUserBalance(fromUserDoc.id, -tipAmount);
+            await firestoreService.changeUserBalance(toUserDoc.id, tipAmount);
+            await firestoreService.incrementRoomTips(roomId, tipAmount);
+            io.to(roomId).emit('tip-received', { from: fromUserDoc.username, amount: tipAmount, creatorId });
+            socket.emit('tip-sent', { amount: tipAmount, newBalance: currentBalance - tipAmount });
+          } else {
+            fromUserDoc.balance -= tipAmount;
+            toUserDoc.balance += tipAmount;
+            fromUserDoc.totalTipped = (fromUserDoc.totalTipped || 0) + tipAmount;
+            await fromUserDoc.save();
+            await toUserDoc.save();
+            const room = rooms.find(r => r.id === roomId);
+            if (room) room.tipsTotal += tipAmount;
+            io.to(roomId).emit('tip-received', { from: fromUserDoc.username, amount: tipAmount, creatorId });
+            socket.emit('tip-sent', { amount: tipAmount, newBalance: fromUserDoc.balance });
+          }
         } else {
           socket.emit('error', 'Insufficient DotsCoins');
         }
@@ -459,17 +635,48 @@ if (!process.env.VERCEL) {
 
 // ── Start ──────────────────────────────────────────
 const PORT = process.env.PORT || 3001;
-db();
-if (require.main === module && server) {
-  server.listen(PORT, () => {
-    console.log(`
+
+async function startService() {
+  let mongoReady = false;
+
+  if (INITIAL_USE_FIRESTORE) {
+    const initResult = initializeFirebase();
+    useFirestore = initResult.initialized;
+    if (useFirestore) {
+      console.log('✅ Using Firestore as the primary data store');
+    } else {
+      console.warn('⚠️ Firestore was enabled but could not initialize. MongoDB will be attempted.');
+      mongoReady = await db();
+    }
+  } else {
+    mongoReady = await db();
+    if (!mongoReady) {
+      const initResult = initializeFirebase();
+      useFirestore = initResult.initialized;
+      if (useFirestore) {
+        console.log('✅ MongoDB unavailable; falling back to Firestore');
+      }
+    }
+  }
+
+  if (!mongoReady && !useFirestore) {
+    console.warn('⚠️ No working database connection available. Some routes may fail.');
+  }
+
+  if (require.main === module && server) {
+    server.listen(PORT, () => {
+      console.log(`
 🍺 ===================================
    DotsBar Server Running!
    http://localhost:${PORT}
+   using Firestore: ${useFirestore}
 🍺 ===================================
-    `);
-  });
+      `);
+    });
+  }
 }
+
+startService();
 
 // ── 404 Handler for API routes ────────────────────
 // Return JSON for API paths to keep frontend `res.json()` from failing.
