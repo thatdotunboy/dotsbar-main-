@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DotsBar — Community Hub</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    body { padding-top: 68px; }
+    .community-wrap { max-width: 1200px; margin: 0 auto; padding: 40px 24px 80px; }
+    .community-hero {
+      background: linear-gradient(135deg, rgba(245,158,11,0.08), rgba(124,58,237,0.05));
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-xl);
+      padding: 40px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+      flex-wrap: wrap;
+    }
+    .community-hero h1 { font-size: 2.2rem; font-weight: 900; margin-bottom: 10px; }
+    .community-hero p { color: var(--text-secondary); max-width: 620px; }
+
+    .community-grid {
+      display: grid;
+      grid-template-columns: 1fr 360px;
+      gap: 24px;
+      align-items: start;
+    }
+
+    @media (max-width: 1024px) { .community-grid { grid-template-columns: 1fr; } }
+
+    .panel { background: var(--bg-card); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); padding: 20px; }
+    .panel h2 { font-size: 1.05rem; font-weight: 800; margin-bottom: 14px; display:flex;align-items:center;gap:10px; }
+
+    .link-grid { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .side-link { display:flex; align-items:center; justify-content:space-between; gap: 10px; padding: 14px 14px; border-radius: var(--radius-md); border:1px solid var(--glass-border); background: rgba(255,255,255,0.02); cursor:pointer; text-decoration:none; color: var(--text-secondary); transition: var(--transition); }
+    .side-link:hover { border-color: var(--amber); background: rgba(245,158,11,0.08); color: var(--text-primary); transform: translateY(-2px); }
+    .side-link strong { color: var(--amber); }
+
+    .discussion-feed { height: 420px; display:flex; flex-direction:column; }
+    .discussion-list { flex:1; overflow:auto; padding-right: 8px; }
+    .discussion-empty { color: var(--text-muted); font-size: 0.9rem; padding: 20px 0; text-align:center; }
+    .discussion-input-row { display:flex; gap: 10px; margin-top: 12px; }
+    .discussion-input-row input { flex:1; }
+
+    .announcement-list { display:flex; flex-direction:column; gap: 12px; }
+    .announcement-item { padding: 14px 14px; border-radius: var(--radius-md); border:1px solid var(--glass-border); background: rgba(255,255,255,0.02); }
+    .announcement-item .title { font-weight: 800; margin-bottom: 6px; }
+    .announcement-item .meta { font-size: 0.8rem; color: var(--text-muted); display:flex;gap:10px;flex-wrap:wrap; }
+    .announcement-item .body { color: var(--text-secondary); font-size: 0.92rem; white-space: pre-wrap; }
+
+    .toast-container { z-index: 99999; }
+  </style>
+</head>
+<body>
+
+<header id="main-header">
+  <div class="container">
+    <a href="index.html" class="logo"><img src="logo.svg" alt="DotsBar"></a>
+    <nav>
+      <ul>
+        <li><a href="bar.html">🍺 The Bar</a></li>
+        <li><a href="stream.html" class="live-indicator">Stream</a></li>
+        <li><a href="events.html">Events</a></li>
+        <li><a href="community.html" class="active">🏙️ Community</a></li>
+      </ul>
+    </nav>
+    <div class="nav-actions">
+      <button class="btn btn-ghost btn-sm" id="open-login">Log In</button>
+      <button class="btn btn-primary btn-sm" onclick="window.location.href='directory.html'">Members</button>
+    </div>
+  </div>
+</header>
+
+<div class="community-wrap">
+  <div class="community-hero">
+    <div>
+      <h1>Community Hub</h1>
+      <p>Discussions, announcements, and member directory — all in one place.</p>
+    </div>
+    <div class="link-grid">
+      <a class="side-link" href="directory.html">
+        <span>👥 Member directory</span>
+        <strong>Open</strong>
+      </a>
+      <a class="side-link" href="announcements.html">
+        <span>📣 Announcements</span>
+        <strong>Open</strong>
+      </a>
+    </div>
+  </div>
+
+  <div class="community-grid">
+    <div class="panel discussion-feed">
+      <h2>💬 Discussions</h2>
+      <div class="discussion-list" id="discussion-list"></div>
+      <div class="discussion-empty" id="discussion-empty">No messages yet.</div>
+      <div class="discussion-input-row">
+        <input id="discussion-input" class="form-input" placeholder="Type a message…" maxlength="200" />
+        <button class="btn btn-primary" style="white-space:nowrap;" id="discussion-send">Send</button>
+      </div>
+      <div style="margin-top:10px; color: var(--text-muted); font-size:0.85rem;">This uses the existing bar-chat socket channel.</div>
+    </div>
+
+    <div class="panel">
+      <h2>📣 Latest Announcements</h2>
+      <div class="announcement-list" id="announcement-list"></div>
+      <div style="margin-top:14px;">
+        <a class="btn btn-outline w-full" style="width:100%;justify-content:center;" href="announcements.html">View all announcements</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+
+<script src="script.js"></script>
+<script>
+  const discussionList = document.getElementById('discussion-list');
+  const discussionEmpty = document.getElementById('discussion-empty');
+  const discussionInput = document.getElementById('discussion-input');
+  const discussionSend = document.getElementById('discussion-send');
+
+  function escapeHtml(str) {
+    return (str || '').replace(/&/g,'&amp;').replace(/</g,'<').replace(/>/g,'>').replace(/\"/g,'"').replace(/'/g,'&#039;');
+  }
+
+  function getUserOrGuest() {
+    return getUser() || { username: 'Guest' };
+  }
+
+  function addDiscussionMessage({ username, message, timestamp }) {
+    if (!discussionList) return;
+
+    const item = document.createElement('div');
+    item.style.padding = '12px 14px';
+    item.style.borderRadius = 'var(--radius-md)';
+    item.style.border = '1px solid var(--glass-border)';
+    item.style.background = 'rgba(255,255,255,0.02)';
+    item.style.marginBottom = '10px';
+
+    const time = timestamp ? new Date(timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '';
+    item.innerHTML = `
+      <div style="font-weight:800; color:var(--text-primary); margin-bottom:6px;">💬 ${escapeHtml(username)}</div>
+      <div style="color:var(--text-secondary); white-space:pre-wrap;">${escapeHtml(message)}</div>
+      <div class="meta" style="margin-top:8px; font-size:0.78rem; color:var(--text-muted);">${time}</div>
+    `;
+
+    discussionList.appendChild(item);
+    discussionEmpty && (discussionEmpty.style.display = 'none');
+    discussionList.scrollTop = discussionList.scrollHeight;
+  }
+
+  discussionSend?.addEventListener('click', () => {
+    const v = discussionInput.value.trim();
+    if (!v) return;
+
+    const u = getUserOrGuest();
+    addDiscussionMessage({ username: u.username, message: v, timestamp: new Date().toISOString() });
+
+    const sock = getSocket();
+    if (sock && sock.connected) {
+      sock.emit('bar-chat', { message: v });
+    }
+
+    discussionInput.value = '';
+  });
+
+  discussionInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') discussionSend?.click();
+  });
+
+  // Announcements
+  async function loadAnnouncements() {
+    const el = document.getElementById('announcement-list');
+    if (!el) return;
+    el.innerHTML = '<div style="color:var(--text-muted);font-size:0.9rem;">Loading…</div>';
+
+    try {
+      const res = await fetch('/api/announcements');
+      const data = await res.json();
+      const list = data.announcements || [];
+      if (!list.length) {
+        el.innerHTML = '<div style="color:var(--text-muted);font-size:0.9rem;">No announcements yet.</div>';
+        return;
+      }
+
+      el.innerHTML = list.slice(0, 5).map(a => `
+        <div class="announcement-item">
+          <div class="title">${escapeHtml(a.title)}</div>
+          <div class="meta"><span>by ${escapeHtml(a.author || 'Unknown')}</span><span>${new Date(a.createdAt).toLocaleString([], {month:'short', day:'2-digit'})}</span></div>
+          <div class="body">${escapeHtml(a.body)}</div>
+        </div>
+      `).join('');
+    } catch (e) {
+      el.innerHTML = '<div style="color:var(--text-muted);font-size:0.9rem;">Failed to load announcements.</div>';
+    }
+  }
+
+  loadAnnouncements();
+
+  // Socket discussion wiring (bar-chat)
+  initSocket((sock) => {
+    const u = getUser();
+    if (u && sock.connected) {
+      // nothing else needed; server uses socket auth token
+    }
+    sock.on('bar-chat', ({ username, message, timestamp }) => {
+      addDiscussionMessage({ username, message, timestamp });
+    });
+  });
+</script>
+</body>
+</html>
+

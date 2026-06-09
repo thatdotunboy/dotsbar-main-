@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DotsBar — Announcements</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    body { padding-top: 68px; }
+    .ann-wrap { max-width: 1100px; margin: 0 auto; padding: 40px 24px 80px; }
+
+    .ann-hero {
+      background: linear-gradient(135deg, rgba(245,158,11,0.08), rgba(124,58,237,0.05));
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-xl);
+      padding: 34px 28px;
+      margin-bottom: 18px;
+      display:flex;
+      align-items:flex-end;
+      justify-content:space-between;
+      gap: 18px;
+      flex-wrap: wrap;
+    }
+
+    .ann-hero h1 { font-size: 2.1rem; font-weight: 900; margin-bottom: 8px; }
+    .ann-hero p { color: var(--text-secondary); max-width: 650px; }
+
+    .ann-grid {
+      display:grid;
+      grid-template-columns: 1fr 360px;
+      gap: 24px;
+      align-items:start;
+    }
+    @media (max-width:1024px){ .ann-grid{ grid-template-columns: 1fr; } }
+
+    .panel { background: var(--bg-card); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); padding: 20px; }
+    .panel h2 { font-size: 1.05rem; font-weight: 900; margin-bottom: 14px; display:flex;align-items:center;gap:10px; }
+
+    .ann-list { display:flex; flex-direction:column; gap: 12px; }
+    .ann-item {
+      padding: 16px;
+      border-radius: var(--radius-md);
+      border:1px solid var(--glass-border);
+      background: rgba(255,255,255,0.02);
+    }
+    .ann-item .title { font-weight: 900; margin-bottom: 6px; }
+    .ann-item .meta { font-size:0.82rem; color:var(--text-muted); display:flex;gap:10px;flex-wrap:wrap; margin-bottom: 10px; }
+    .ann-item .body { color: var(--text-secondary); white-space: pre-wrap; }
+
+    .create-form { display:flex; flex-direction:column; gap: 10px; }
+    textarea.form-input { min-height: 110px; resize: vertical; }
+
+    .hidden { display:none !important; }
+  </style>
+</head>
+<body>
+
+<header id="main-header">
+  <div class="container">
+    <a href="index.html" class="logo"><img src="logo.svg" alt="DotsBar"></a>
+    <nav>
+      <ul>
+        <li><a href="bar.html">🍺 The Bar</a></li>
+        <li><a href="stream.html" class="live-indicator">Stream</a></li>
+        <li><a href="events.html">Events</a></li>
+        <li><a href="community.html" >🏙️ Community</a></li>
+      </ul>
+    </nav>
+    <div class="nav-actions">
+      <button class="btn btn-ghost btn-sm" id="open-login">Log In</button>
+    </div>
+  </div>
+</header>
+
+<div class="ann-wrap">
+  <div class="ann-hero">
+    <div>
+      <h1>📣 Announcements</h1>
+      <p>Official updates from DotsBar hosts and community creators.</p>
+    </div>
+    <a class="btn btn-outline btn-sm" href="community.html">← Back to Community</a>
+  </div>
+
+  <div class="ann-grid">
+    <div class="panel">
+      <h2>Latest</h2>
+      <div class="ann-list" id="announcement-list"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Post an announcement</h2>
+      <div id="create-form" class="create-form hidden">
+        <input id="ann-title" class="form-input" placeholder="Title" maxlength="80" />
+        <textarea id="ann-body" class="form-input" placeholder="What should the community know?" maxlength="600"></textarea>
+        <button class="btn btn-primary" id="ann-post-btn">Post</button>
+        <div style="color:var(--text-muted);font-size:0.82rem;">Anyone logged in can post (minimal moderation).</div>
+      </div>
+      <div id="create-login" style="color:var(--text-muted);font-size:0.9rem;line-height:1.5;">Log in to post announcements.</div>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+
+<script src="script.js"></script>
+<script>
+  function escapeHtml(str) {
+    return (str || '').replace(/&/g,'&amp;').replace(/</g,'<').replace(/>/g,'>').replace(/\"/g,'"').replace(/'/g,'&#039;');
+  }
+
+  async function loadAnnouncements() {
+    const el = document.getElementById('announcement-list');
+    if (!el) return;
+    el.innerHTML = '<div style="color:var(--text-muted);font-size:0.9rem;">Loading…</div>';
+
+    try {
+      const res = await fetch('/api/announcements');
+      const data = await res.json();
+      const list = data.announcements || [];
+
+      if (!list.length) {
+        el.innerHTML = '<div style="color:var(--text-muted);font-size:0.9rem;">No announcements yet.</div>';
+        return;
+      }
+
+      el.innerHTML = list.map(a => `
+        <div class="ann-item">
+          <div class="title">${escapeHtml(a.title)}</div>
+          <div class="meta"><span>by ${escapeHtml(a.author || 'Unknown')}</span><span>${new Date(a.createdAt).toLocaleString()}</span></div>
+          <div class="body">${escapeHtml(a.body)}</div>
+        </div>
+      `).join('');
+    } catch (e) {
+      el.innerHTML = '<div style="color:var(--text-muted);font-size:0.9rem;">Failed to load announcements.</div>';
+    }
+  }
+
+  const user = getUser();
+  const createForm = document.getElementById('create-form');
+  const createLogin = document.getElementById('create-login');
+  if (user) {
+    createLogin && createLogin.classList.add('hidden');
+    createForm && createForm.classList.remove('hidden');
+  }
+
+  async function postAnnouncement() {
+    const u = getUser();
+    if (!u) {
+      showGlobalToast('Please log in to post', 'error');
+      return;
+    }
+
+    const title = document.getElementById('ann-title').value.trim();
+    const body = document.getElementById('ann-body').value.trim();
+    if (!title || !body) {
+      showGlobalToast('Title and message are required', 'error');
+      return;
+    }
+
+    const token = getToken();
+
+    const res = await fetch('/api/announcements', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ title, body })
+    });
+
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      showGlobalToast(d.error || 'Failed to post', 'error');
+      return;
+    }
+
+    document.getElementById('ann-title').value = '';
+    document.getElementById('ann-body').value = '';
+    showGlobalToast('Announcement posted!', 'success');
+    await loadAnnouncements();
+  }
+
+  document.getElementById('ann-post-btn')?.addEventListener('click', postAnnouncement);
+
+  // login button behavior
+  document.getElementById('open-login')?.addEventListener('click', () => {
+    const u = getUser();
+    if (u) window.location.href = 'announcements.html';
+    else window.location.href = 'index.html';
+  });
+
+  loadAnnouncements();
+</script>
+</body>
+</html>
+

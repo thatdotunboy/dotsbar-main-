@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DotsBar — Member Directory</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    body { padding-top: 68px; }
+    .dir-wrap { max-width: 1100px; margin: 0 auto; padding: 40px 24px 80px; }
+    .dir-hero {
+      background: linear-gradient(135deg, rgba(245,158,11,0.08), rgba(124,58,237,0.05));
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-xl);
+      padding: 34px 28px;
+      margin-bottom: 24px;
+      display:flex;
+      align-items:flex-end;
+      justify-content:space-between;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+    .dir-hero h1 { font-size: 2.0rem; font-weight: 900; margin-bottom: 8px; }
+    .dir-hero p { color: var(--text-secondary); max-width: 650px; }
+
+    .dir-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+
+    .member-card {
+      background: var(--bg-card);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-lg);
+      padding: 18px;
+      transition: var(--transition);
+    }
+    .member-card:hover { border-color: rgba(245,158,11,0.35); transform: translateY(-3px); }
+
+    .member-top { display:flex; align-items:center; gap: 12px; margin-bottom: 12px; }
+    .member-avatar {
+      width: 46px; height: 46px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--amber), #d97706);
+      display:flex; align-items:center; justify-content:center;
+      font-weight: 900; color: #000; flex-shrink:0;
+      font-family: 'Outfit', sans-serif;
+    }
+
+    .member-username { font-weight: 900; font-size: 1rem; }
+    .member-sub { color: var(--text-muted); font-size: 0.8rem; margin-top: 4px; }
+
+    .badge-row { display:flex; gap: 8px; flex-wrap: wrap; }
+    .pill {
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(245,158,11,0.25);
+      background: rgba(245,158,11,0.08);
+      color: var(--amber);
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+    .pill.ghost { background: rgba(255,255,255,0.02); border-color: var(--glass-border); color: var(--text-secondary); }
+
+    .dir-actions { display:flex; gap:10px; flex-wrap: wrap; align-items:center; }
+    .search-box { flex: 1; min-width: 220px; }
+  </style>
+</head>
+<body>
+
+<header id="main-header">
+  <div class="container">
+    <a href="index.html" class="logo"><img src="logo.svg" alt="DotsBar"></a>
+    <nav>
+      <ul>
+        <li><a href="community.html" class="active">🏙️ Community</a></li>
+        <li><a href="events.html">Events</a></li>
+        <li><a href="stream.html" class="live-indicator">Stream</a></li>
+      </ul>
+    </nav>
+    <div class="nav-actions">
+      <button class="btn btn-ghost btn-sm" id="open-login">Log In</button>
+    </div>
+  </div>
+</header>
+
+<div class="dir-wrap">
+  <div class="dir-hero">
+    <div>
+      <h1>Member Directory</h1>
+      <p>Browse the DotsBar community. See creators and quickly discover members.</p>
+    </div>
+    <div class="dir-actions">
+      <input id="member-search" class="form-input search-box" placeholder="Search by username..." />
+      <button class="btn btn-outline btn-sm" onclick="loadMembers()">Refresh</button>
+    </div>
+  </div>
+
+  <div id="member-grid" class="dir-grid"></div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+
+<script src="script.js"></script>
+<script>
+  function escapeHtml(str) {
+    return (str || '').replace(/&/g,'&amp;').replace(/</g,'<').replace(/>/g,'>').replace(/\"/g,'"').replace(/'/g,'&#039;');
+  }
+
+  function initials(name) {
+    const s = (name || 'U').trim();
+    return s.length ? s[0].toUpperCase() : 'U';
+  }
+
+  let allMembers = [];
+
+  async function loadMembers() {
+    const grid = document.getElementById('member-grid');
+    if (!grid) return;
+    grid.innerHTML = '<div style="color:var(--text-muted);">Loading…</div>';
+
+    try {
+      const res = await fetch('/api/directory');
+      const data = await res.json();
+      allMembers = data.users || data || [];
+      render();
+    } catch (e) {
+      grid.innerHTML = '<div style="color:var(--text-muted);">Failed to load members.</div>';
+    }
+  }
+
+  function render() {
+    const q = (document.getElementById('member-search')?.value || '').trim().toLowerCase();
+    const list = !q ? allMembers : allMembers.filter(m => (m.username || '').toLowerCase().includes(q));
+
+    const grid = document.getElementById('member-grid');
+    if (!grid) return;
+
+    if (!list.length) {
+      grid.innerHTML = '<div style="color:var(--text-muted);">No members found.</div>';
+      return;
+    }
+
+    grid.innerHTML = list.map(m => `
+      <div class="member-card">
+        <div class="member-top">
+          <div class="member-avatar">${escapeHtml(initials(m.username))}</div>
+          <div>
+            <div class="member-username">${escapeHtml(m.username)}</div>
+            <div class="member-sub">${m.id ? 'User ID: ' + escapeHtml(String(m.id).slice(0, 6)) + '…' : ''}</div>
+          </div>
+        </div>
+        <div class="badge-row">
+          ${m.isCreator ? '<div class="pill">🎙 Creator</div>' : '<div class="pill ghost">Member</div>'}
+        </div>
+      </div>
+    `).join('');
+  }
+
+  document.getElementById('member-search')?.addEventListener('input', () => render());
+
+  // login button behavior: reuse main script helpers when available
+  const loginBtn = document.getElementById('open-login');
+  loginBtn?.addEventListener('click', () => {
+    const user = getUser();
+    if (user) window.location.href = 'profile.html';
+    else window.location.href = 'index.html';
+  });
+
+  loadMembers();
+</script>
+</body>
+</html>
+
