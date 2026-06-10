@@ -54,13 +54,12 @@ async function findUserById(id) {
   return normalizeUser({ id: doc.id, ...doc.data() });
 }
 
-async function createUser({ username, email, password, isCreator = false, balance = 0, totalTipped = 0 }) {
+async function createUser({ id, username, email, isCreator = false, balance = 0, totalTipped = 0 }) {
   const firestore = getDb();
   const now = new Date().toISOString();
   const data = {
     username: String(username),
     email: String(email).toLowerCase(),
-    password: String(password),
     isCreator: Boolean(isCreator),
     balance: Number(balance) || 0,
     totalTipped: Number(totalTipped) || 0,
@@ -68,7 +67,7 @@ async function createUser({ username, email, password, isCreator = false, balanc
     createdAt: now,
     updatedAt: now
   };
-  const ref = firestore.collection(COLLECTIONS.USERS).doc();
+  const ref = firestore.collection(COLLECTIONS.USERS).doc(String(id));
   await ref.set(data);
   return normalizeUser({ id: ref.id, ...data });
 }

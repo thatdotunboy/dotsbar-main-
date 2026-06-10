@@ -250,6 +250,10 @@
 
 <div class="toast-container" id="toast-container"></div>
 
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-auth-compat.js"></script>
+
   <script src="script.js"></script>
   <script>window.__DOTSBAR_API_BASE__ = window.__DOTSBAR_API_BASE__ || window.location.origin;</script>
 <script>
@@ -300,14 +304,15 @@ document.getElementById('login-btn')?.addEventListener('click', async () => {
   loginBtn.textContent = 'Logging in…';
   loginBtn.disabled = true;
   try {
-    const r = await fetch('/api/auth/login', {
+    const userCredential = await firebase.auth().signInWithEmailAndPassword(email, password);
+    const token = await userCredential.user.getIdToken();
+    const r = await fetch('/api/auth/sync', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
     });
     const d = await r.json();
-    if (!r.ok) throw new Error(d.error || 'Login failed');
-    localStorage.setItem('token', d.token);
+    if (!r.ok) throw new Error(d.error || 'Login sync failed');
+    localStorage.setItem('token', token);
     localStorage.setItem('user', JSON.stringify(d.user));
     modal.classList.remove('open');
     showToast(`Welcome back, ${d.user.username}! 🍺`, 'success');
@@ -331,14 +336,16 @@ document.getElementById('register-btn')?.addEventListener('click', async () => {
   regBtn.textContent = 'Creating account…';
   regBtn.disabled = true;
   try {
-    const r = await fetch('/api/auth/register', {
+    const userCredential = await firebase.auth().createUserWithEmailAndPassword(email, password);
+    const token = await userCredential.user.getIdToken();
+    const r = await fetch('/api/auth/sync', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, email, password, isCreator })
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ username, isCreator })
     });
     const d = await r.json();
-    if (!r.ok) throw new Error(d.error || 'Registration failed');
-    localStorage.setItem('token', d.token);
+    if (!r.ok) throw new Error(d.error || 'Registration sync failed');
+    localStorage.setItem('token', token);
     localStorage.setItem('user', JSON.stringify(d.user));
     modal.classList.remove('open');
     showToast(`Welcome to DotsBar, ${d.user.username}! 🎉 You got 1,000 DotsCoins to start!`, 'success');

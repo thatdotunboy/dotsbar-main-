@@ -97,7 +97,12 @@
 
 <div class="toast-container" id="toast-container"></div>
 
-<script src="script.js"></script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-auth-compat.js"></script>
+
+  <script src="script.js"></script>
 <script>
   function escapeHtml(str) {
     return (str || '').replace(/&/g,'&amp;').replace(/</g,'<').replace(/>/g,'>').replace(/\"/g,'"').replace(/'/g,'&#039;');

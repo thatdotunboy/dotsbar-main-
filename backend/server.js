@@ -4,8 +4,7 @@ const path = require('path');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs');
+// Auth handled via Firebase now
 
 const { initializeFirebase, getFirestore } = require('./firebase');
 const firestoreService = require('./firestore-service');
@@ -95,77 +94,67 @@ app.use(apiLimiter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Auth middleware
-const verifyToken = (req, res, next) => {
+// Auth middleware using Firebase Admin Auth
+const { getAuth } = require('./firebase');
+const verifyToken = async (req, res, next) => {
   const token = req.header('Authorization')?.replace('Bearer ', '');
   if (!token) return res.status(401).json({ error: 'Access denied' });
   try {
-    req.user = jwt.verify(token, JWT_SECRET);
+    const auth = getAuth();
+    if (!auth) throw new Error('Firebase Auth not initialized');
+    const decodedToken = await auth.verifyIdToken(token);
+    const user = await firestoreService.findUserById(decodedToken.uid);
+    if (!user) throw new Error('User not found in database');
+    req.user = user;
     next();
-  } catch {
+  } catch (error) {
+    console.error('Token verification error:', error.message);
     res.status(401).json({ error: 'Invalid token' });
   }
 };
 
 // ── Auth routes ────────────────────────────────────
-app.post('/api/auth/register', async (req, res) => {
+// This sync endpoint is called after the client authenticates with Firebase.
+// It ensures a Firestore user document exists for this Firebase user.
+app.post('/api/auth/sync', async (req, res) => {
   try {
-    const username = String(req.body.username || '').trim();
-    const email = normalizeEmail(req.body.email);
-    const password = String(req.body.password || '');
-    const isCreator = Boolean(req.body.isCreator);
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+    if (!token) return res.status(401).json({ error: 'No token provided' });
 
-    if (!username || !email || !password) {
-      return res.status(400).json({ error: 'Username, email, and password are required.' });
-    }
-    if (!isValidEmail(email)) {
-      return res.status(400).json({ error: 'A valid email address is required.' });
-    }
-    const existing = await firestoreService.findUserByEmail(email);
-    if (existing) return res.status(400).json({ error: 'Email already registered' });
+    const auth = getAuth();
+    if (!auth) throw new Error('Firebase Auth not initialized');
 
-    const hashedPassword = await bcrypt.hash(password, 12);
-    const newUser = await firestoreService.createUser({
-      username,
-      email,
-      password: hashedPassword,
-      isCreator,
-      balance: 0
-    });
-    const token = jwt.sign({ id: newUser.id, username: newUser.username }, JWT_SECRET, { expiresIn: '7d' });
-    return res.json({
-      token,
-      user: {
-        id: newUser.id,
-        username: newUser.username,
-        email: newUser.email,
-        isCreator: newUser.isCreator,
-        balance: newUser.balance
-      }
+    const decodedToken = await auth.verifyIdToken(token);
+    const uid = decodedToken.uid;
+    const email = decodedToken.email;
+
+    // Check if user exists in Firestore
+    let user = await firestoreService.findUserById(uid);
+    if (!user) {
+      // If it's a new user, they passed 'username' and 'isCreator' in the body during sign-up
+      const username = String(req.body.username || email.split('@')[0]).trim();
+      const isCreator = Boolean(req.body.isCreator);
+      
+      user = await firestoreService.createUser({
+        id: uid,
+        username,
+        email,
+        isCreator,
+        balance: 1000 // give 1000 coins to new users
+      });
+    }
+
+    return res.json({ 
+      user: { 
+        id: user.id, 
+        username: user.username, 
+        email: user.email, 
+        isCreator: user.isCreator, 
+        balance: user.balance 
+      } 
     });
   } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-});
-
-app.post('/api/auth/login', async (req, res) => {
-  try {
-    const email = normalizeEmail(req.body.email);
-    const password = String(req.body.password || '');
-
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required.' });
-    }
-    if (!isValidEmail(email)) {
-      return res.status(400).json({ error: 'A valid email address is required.' });
-    }
-    const user = await firestoreService.findUserByEmail(email);
-    if (!user || !(await bcrypt.compare(password, user.password))) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-    const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
-    return res.json({ token, user: { id: user.id, username: user.username, email: user.email, isCreator: user.isCreator, balance: user.balance } });
-  } catch (error) {
+    console.error('Auth sync error:', error.message);
     res.status(400).json({ error: error.message });
   }
 });
@@ -517,12 +506,18 @@ if (!process.env.VERCEL) {
     console.log('🔌 User connected:', socket.id);
 
     // Auth handshake
-    socket.on('auth', (token) => {
+    socket.on('auth', async (token) => {
       try {
-        const decoded = jwt.verify(token, JWT_SECRET);
-        socketUsers.set(socket.id, { id: decoded.id, username: decoded.username });
-        socket.emit('auth-ok', { username: decoded.username });
-      } catch {
+        const auth = getAuth();
+        if (!auth) throw new Error('Firebase Auth not initialized');
+        const decodedToken = await auth.verifyIdToken(token);
+        const user = await firestoreService.findUserById(decodedToken.uid);
+        if (!user) throw new Error('User not found in database');
+        
+        socketUsers.set(socket.id, { id: user.id, username: user.username });
+        socket.emit('auth-ok', { username: user.username });
+      } catch (err) {
+        console.error('Socket auth error:', err.message);
         socket.emit('auth-error', 'Invalid token');
       }
     });

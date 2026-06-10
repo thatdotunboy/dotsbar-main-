@@ -11,6 +11,32 @@ const CONFIG = {
   serverUrl: API_BASE
 };
 
+// ── Firebase Initialization ───────────────────────
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyB8D92i7j2qQW3PeolxyfbQCr6l8Qak-Zw",
+  authDomain: "dotsbar-6106f.firebaseapp.com",
+  projectId: "dotsbar-6106f",
+  storageBucket: "dotsbar-6106f.firebasestorage.app",
+  messagingSenderId: "290270763437",
+  appId: "1:290270763437:web:6a3301f5093b2b146ca924",
+  measurementId: "G-V1VQQ9DFJ7"
+};
+
+if (typeof firebase !== 'undefined' && !firebase.apps.length) {
+  firebase.initializeApp(firebaseConfig);
+  
+  firebase.auth().onAuthStateChanged(async (user) => {
+    if (user) {
+      try {
+        const token = await user.getIdToken();
+        localStorage.setItem('token', token);
+      } catch (e) {
+        console.error("Failed to get Firebase token", e);
+      }
+    }
+  });
+}
 
 // ── Auth Helpers ──────────────────────────────────
 function getUser() {
@@ -21,7 +47,14 @@ function getToken() {
   return localStorage.getItem('token') || null;
 }
 
-function logoutUser() {
+async function logoutUser() {
+  if (typeof firebase !== 'undefined') {
+    try {
+      await firebase.auth().signOut();
+    } catch (e) {
+      console.error('Firebase sign out error', e);
+    }
+  }
   localStorage.removeItem('token');
   localStorage.removeItem('user');
   localStorage.removeItem('cart');
