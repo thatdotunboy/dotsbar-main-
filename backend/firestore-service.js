@@ -5,7 +5,10 @@ const COLLECTIONS = {
   USERS: 'users',
   EVENTS: 'events',
   ANNOUNCEMENTS: 'announcements',
-  ROOMS: 'rooms'
+  ROOMS: 'rooms',
+  COMMUNITIES: 'communities',
+  COMMUNITY_MEMBERS: 'communityMembers',
+  COMMUNITY_INVITES: 'communityInvites'
 };
 
 function getDb() {
@@ -230,6 +233,221 @@ async function incrementRoomTips(roomId, amount) {
   });
 }
 
+// ── Community CRUD / Membership / Invites (Firestore MVP) ────────────────
+
+function safeString(val) {
+  return String(val ?? '').trim();
+}
+
+async function createCommunity({ name, description, logoUrl, bannerUrl, category = 'general', privacy = 'public', creatorId }) {
+  const firestore = getDb();
+  const now = new Date().toISOString();
+  const data = {
+    name: safeString(name),
+    description: safeString(description),
+    logoUrl: safeString(logoUrl),
+    bannerUrl: safeString(bannerUrl),
+    category: safeString(category) || 'general',
+    privacy: privacy || 'public',
+    createdBy: String(creatorId),
+    createdAt: now,
+    updatedAt: now,
+  };
+  const ref = firestore.collection(COLLECTIONS.COMMUNITIES).doc();
+  await ref.set(data);
+  return normalizeDoc({ id: ref.id, ...data, exists: true });
+}
+
+async function getCommunities() {
+  const firestore = getDb();
+  const snapshot = await firestore.collection(COLLECTIONS.COMMUNITIES)
+    .orderBy('createdAt', 'desc')
+    .limit(200)
+    .get();
+
+  const list = snapshot.docs.map((doc) => normalizeDoc(doc));
+  return Promise.all(
+    list.map(async (c) => {
+      const creator = c.createdBy ? await findUserById(c.createdBy) : null;
+      return { ...c, creatorUsername: creator?.username || 'Unknown' };
+    })
+  );
+}
+
+async function getCommunityById(id) {
+  const firestore = getDb();
+  const doc = await firestore.collection(COLLECTIONS.COMMUNITIES).doc(String(id)).get();
+  if (!doc.exists) return null;
+  const c = normalizeDoc(doc);
+  const creator = c.createdBy ? await findUserById(c.createdBy) : null;
+  return { ...c, creatorUsername: creator?.username || 'Unknown' };
+}
+
+async function upsertCommunityMember({ communityId, userId, role = 'member' }) {
+  const firestore = getDb();
+  const now = new Date().toISOString();
+  const ref = firestore.collection(COLLECTIONS.COMMUNITY_MEMBERS)
+    .doc();
+
+  // Ensure uniqueness by querying existing membership; keep simple for MVP.
+  const existing = await firestore
+    .collection(COLLECTIONS.COMMUNITY_MEMBERS)
+    .where('communityId', '==', String(communityId))
+    .where('userId', '==', String(userId))
+    .limit(1)
+    .get();
+
+  if (!existing.empty) {
+    const doc = existing.docs[0];
+    await firestore.collection(COLLECTIONS.COMMUNITY_MEMBERS).doc(doc.id).update({
+      role,
+      banned: false,
+      joinedAt: doc.data().joinedAt || now,
+      updatedAt: now,
+    });
+    return { id: doc.id, ...doc.data(), role };
+  }
+
+  const data = {
+    communityId: String(communityId),
+    userId: String(userId),
+    role: role || 'member',
+    joinedAt: now,
+    updatedAt: now,
+    banned: false,
+  };
+
+  await ref.set(data);
+  return { id: ref.id, ...data };
+}
+
+async function getCommunityMembers({ communityId, limit = 200 }) {
+  const firestore = getDb();
+  const snapshot = await firestore.collection(COLLECTIONS.COMMUNITY_MEMBERS)
+    .where('communityId', '==', String(communityId))
+    .where('banned', '==', false)
+    .limit(limit)
+    .get();
+
+  const members = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  return Promise.all(
+    members.map(async (m) => {
+      const u = await findUserById(m.userId);
+      return {
+        id: m.id,
+        userId: m.userId,
+        username: u?.username || 'Unknown',
+        role: m.role || 'member',
+        joinedAt: m.joinedAt || null,
+      };
+    })
+  );
+}
+
+async function setCommunityMemberRole({ communityId, targetUserId, role }) {
+  const firestore = getDb();
+  const snapshot = await firestore.collection(COLLECTIONS.COMMUNITY_MEMBERS)
+    .where('communityId', '==', String(communityId))
+    .where('userId', '==', String(targetUserId))
+    .limit(1)
+    .get();
+
+  if (snapshot.empty) return false;
+  const doc = snapshot.docs[0];
+  await firestore.collection(COLLECTIONS.COMMUNITY_MEMBERS).doc(doc.id).update({ role, updatedAt: new Date().toISOString() });
+  return true;
+}
+
+async function removeCommunityMember({ communityId, targetUserId }) {
+  const firestore = getDb();
+  const snapshot = await firestore.collection(COLLECTIONS.COMMUNITY_MEMBERS)
+    .where('communityId', '==', String(communityId))
+    .where('userId', '==', String(targetUserId))
+    .limit(1)
+    .get();
+
+  if (snapshot.empty) return false;
+  const doc = snapshot.docs[0];
+  await firestore.collection(COLLECTIONS.COMMUNITY_MEMBERS).doc(doc.id).delete();
+  return true;
+}
+
+async function banCommunityMember({ communityId, targetUserId }) {
+  const firestore = getDb();
+  const snapshot = await firestore.collection(COLLECTIONS.COMMUNITY_MEMBERS)
+    .where('communityId', '==', String(communityId))
+    .where('userId', '==', String(targetUserId))
+    .limit(1)
+    .get();
+
+  if (snapshot.empty) return false;
+  const doc = snapshot.docs[0];
+  await firestore.collection(COLLECTIONS.COMMUNITY_MEMBERS).doc(doc.id).update({
+    banned: true,
+    updatedAt: new Date().toISOString(),
+  });
+  return true;
+}
+
+async function getCommunityMemberRole({ communityId, userId }) {
+  const firestore = getDb();
+  const snapshot = await firestore.collection(COLLECTIONS.COMMUNITY_MEMBERS)
+    .where('communityId', '==', String(communityId))
+    .where('userId', '==', String(userId))
+    .limit(1)
+    .get();
+
+  if (snapshot.empty) return null;
+  const doc = snapshot.docs[0];
+  if (doc.data().banned) return null;
+  return doc.data().role || 'member';
+}
+
+async function createCommunityInvite({ communityId, creatorId, role = 'member', expiresAtMs = 7 * 24 * 60 * 60 * 1000 }) {
+  const firestore = getDb();
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + expiresAtMs);
+  const token = `${String(communityId).slice(0, 6)}-${Math.random().toString(36).slice(2, 10)}-${Date.now()}`;
+
+  const data = {
+    communityId: String(communityId),
+    token,
+    role: role || 'member',
+    createdBy: String(creatorId),
+    createdAt: now.toISOString(),
+    updatedAt: now.toISOString(),
+    expiresAt: expiresAt.toISOString(),
+    usedAt: null,
+  };
+  const ref = firestore.collection(COLLECTIONS.COMMUNITY_INVITES).doc();
+  await ref.set(data);
+  return normalizeDoc({ id: ref.id, ...data, exists: true });
+}
+
+async function consumeCommunityInvite({ communityId, token }) {
+  const firestore = getDb();
+  const snapshot = await firestore.collection(COLLECTIONS.COMMUNITY_INVITES)
+    .where('communityId', '==', String(communityId))
+    .where('token', '==', String(token))
+    .limit(1)
+    .get();
+
+  if (snapshot.empty) return null;
+  const doc = snapshot.docs[0];
+  const data = doc.data();
+  if (data.usedAt) return null;
+  if (data.expiresAt && new Date(data.expiresAt).getTime() < Date.now()) return null;
+  await firestore.collection(COLLECTIONS.COMMUNITY_INVITES).doc(doc.id).update({ usedAt: new Date().toISOString() });
+  return { id: doc.id, ...data };
+}
+
+async function joinCommunityViaInvite({ communityId, userId, token }) {
+  const invite = await consumeCommunityInvite({ communityId, token });
+  if (!invite) return { ok: false, error: 'Invalid or expired invite token' };
+  await upsertCommunityMember({ communityId, userId, role: invite.role || 'member' });
+  return { ok: true, invite };
+}
+
 module.exports = {
   findUserByEmail,
   findUserById,
@@ -247,5 +465,19 @@ module.exports = {
   getRooms,
   getRoomById,
   addRoomChatMessage,
-  incrementRoomTips
+  incrementRoomTips,
+
+  // Communities
+  createCommunity,
+  getCommunities,
+  getCommunityById,
+  createCommunityInvite,
+  joinCommunityViaInvite,
+  upsertCommunityMember,
+  getCommunityMembers,
+  getCommunityMemberRole,
+  setCommunityMemberRole,
+  removeCommunityMember,
+  banCommunityMember,
 };
+

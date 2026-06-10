@@ -287,6 +287,166 @@ app.get('/api/matches', async (req, res) => {
   }
 });
 
+// ── Community API ───────────────────────────────────
+
+app.post('/api/communities', verifyToken, async (req, res) => {
+  try {
+    const { name, description, logoUrl, bannerUrl, category, privacy } = req.body;
+    if (!name) return res.status(400).json({ error: 'Community name is required' });
+    const created = await firestoreService.createCommunity({
+      name,
+      description,
+      logoUrl,
+      bannerUrl,
+      category,
+      privacy,
+      creatorId: req.user.id,
+    });
+    return res.json(created);
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
+  }
+});
+
+app.get('/api/communities', async (req, res) => {
+  try {
+    const communities = await firestoreService.getCommunities();
+    return res.json({ communities, total: communities.length });
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
+  }
+});
+
+app.get('/api/communities/:id', async (req, res) => {
+  try {
+    const c = await firestoreService.getCommunityById(req.params.id);
+    if (!c) return res.status(404).json({ error: 'Community not found' });
+    return res.json({ community: c });
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
+  }
+});
+
+app.post('/api/communities/:id/invite', verifyToken, async (req, res) => {
+  try {
+    const role = req.body.role || 'member';
+    const community = await firestoreService.getCommunityById(req.params.id);
+    if (!community) return res.status(404).json({ error: 'Community not found' });
+
+    const myRole = await firestoreService.getCommunityMemberRole({ communityId: req.params.id, userId: req.user.id });
+    const isPrivileged = myRole === 'owner' || myRole === 'administrator' || myRole === 'moderator';
+    if (!isPrivileged && String(community.createdBy) !== String(req.user.id)) {
+      return res.status(403).json({ error: 'Not authorised to invite members' });
+    }
+
+    const invite = await firestoreService.createCommunityInvite({
+      communityId: req.params.id,
+      creatorId: req.user.id,
+      role,
+    });
+
+    return res.json({ invite });
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
+  }
+});
+
+app.post('/api/communities/:id/join', verifyToken, async (req, res) => {
+  try {
+    const { inviteToken } = req.body;
+    const community = await firestoreService.getCommunityById(req.params.id);
+    if (!community) return res.status(404).json({ error: 'Community not found' });
+
+    // For MVP: if public -> join directly; else require inviteToken
+    if (community.privacy === 'public') {
+      await firestoreService.upsertCommunityMember({ communityId: req.params.id, userId: req.user.id, role: 'member' });
+      return res.json({ ok: true, joined: true });
+    }
+
+    if (!inviteToken) {
+      return res.status(400).json({ error: 'Invite token is required for this community' });
+    }
+
+    const result = await firestoreService.joinCommunityViaInvite({
+      communityId: req.params.id,
+      userId: req.user.id,
+      token: inviteToken,
+    });
+
+    if (!result.ok) return res.status(400).json({ error: result.error });
+    return res.json({ ok: true, joined: true });
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
+  }
+});
+
+app.get('/api/communities/:id/members', verifyToken, async (req, res) => {
+  try {
+    const community = await firestoreService.getCommunityById(req.params.id);
+    if (!community) return res.status(404).json({ error: 'Community not found' });
+
+    const role = await firestoreService.getCommunityMemberRole({ communityId: req.params.id, userId: req.user.id });
+    if (!role) return res.status(403).json({ error: 'Not a member' });
+
+    const members = await firestoreService.getCommunityMembers({ communityId: req.params.id, limit: 200 });
+    return res.json({ members });
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
+  }
+});
+
+app.post('/api/communities/:id/members/:userId/role', verifyToken, async (req, res) => {
+  try {
+    const { role } = req.body;
+    const community = await firestoreService.getCommunityById(req.params.id);
+    if (!community) return res.status(404).json({ error: 'Community not found' });
+
+    const myRole = await firestoreService.getCommunityMemberRole({ communityId: req.params.id, userId: req.user.id });
+    const isPrivileged = myRole === 'owner' || myRole === 'administrator';
+    if (!isPrivileged) return res.status(403).json({ error: 'Not authorised' });
+
+    const ok = await firestoreService.setCommunityMemberRole({ communityId: req.params.id, targetUserId: req.params.userId, role });
+    if (!ok) return res.status(404).json({ error: 'Member not found' });
+    return res.json({ ok: true });
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
+  }
+});
+
+app.post('/api/communities/:id/members/:userId/remove', verifyToken, async (req, res) => {
+  try {
+    const community = await firestoreService.getCommunityById(req.params.id);
+    if (!community) return res.status(404).json({ error: 'Community not found' });
+
+    const myRole = await firestoreService.getCommunityMemberRole({ communityId: req.params.id, userId: req.user.id });
+    const isPrivileged = myRole === 'owner' || myRole === 'administrator' || myRole === 'moderator';
+    if (!isPrivileged) return res.status(403).json({ error: 'Not authorised' });
+
+    const ok = await firestoreService.removeCommunityMember({ communityId: req.params.id, targetUserId: req.params.userId });
+    if (!ok) return res.status(404).json({ error: 'Member not found' });
+    return res.json({ ok: true });
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
+  }
+});
+
+app.post('/api/communities/:id/members/:userId/ban', verifyToken, async (req, res) => {
+  try {
+    const community = await firestoreService.getCommunityById(req.params.id);
+    if (!community) return res.status(404).json({ error: 'Community not found' });
+
+    const myRole = await firestoreService.getCommunityMemberRole({ communityId: req.params.id, userId: req.user.id });
+    const isPrivileged = myRole === 'owner' || myRole === 'administrator' || myRole === 'moderator';
+    if (!isPrivileged) return res.status(403).json({ error: 'Not authorised' });
+
+    const ok = await firestoreService.banCommunityMember({ communityId: req.params.id, targetUserId: req.params.userId });
+    if (!ok) return res.status(404).json({ error: 'Member not found' });
+    return res.json({ ok: true });
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
+  }
+});
+
 // ── Events API ─────────────────────────────────────
 app.get('/api/events', async (req, res) => {
   try {

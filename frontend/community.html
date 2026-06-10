@@ -98,11 +98,40 @@
       <h2>💬 Discussions</h2>
       <div class="discussion-list" id="discussion-list"></div>
       <div class="discussion-empty" id="discussion-empty">No messages yet.</div>
-      <div class="discussion-input-row">
+    <div class="discussion-input-row">
         <input id="discussion-input" class="form-input" placeholder="Type a message…" maxlength="200" />
         <button class="btn btn-primary" style="white-space:nowrap;" id="discussion-send">Send</button>
       </div>
       <div style="margin-top:10px; color: var(--text-muted); font-size:0.85rem;">This uses the existing bar-chat socket channel.</div>
+    </div>
+
+    <div class="panel" id="community-actions-panel">
+      <h2>🏙️ Community</h2>
+      <div style="display:flex;gap:10px;flex-direction:column;">
+        <div>
+          <div style="font-weight:800;margin-bottom:6px;color:var(--text-primary);">Create community</div>
+          <input id="com-name" class="form-input" placeholder="Community name" />
+          <input id="com-description" class="form-input" placeholder="Description (optional)" style="margin-top:8px;" />
+          <select id="com-privacy" class="form-input" style="margin-top:8px;">
+            <option value="public">Public</option>
+            <option value="private">Private</option>
+            <option value="invite_only">Invite only</option>
+          </select>
+          <button class="btn btn-primary w-full" style="justify-content:center;margin-top:10px;" onclick="createCommunity()">+ Create</button>
+        </div>
+
+        <div>
+          <div style="font-weight:800;margin-bottom:6px;color:var(--text-primary);margin-top:8px;">Join community</div>
+          <input id="com-id" class="form-input" placeholder="Community ID" />
+          <input id="com-invite-token" class="form-input" placeholder="Invite token (required for non-public)" style="margin-top:8px;" />
+          <button class="btn btn-outline w-full" style="justify-content:center;margin-top:10px;" onclick="joinCommunity()">Join</button>
+        </div>
+
+        <div>
+          <div style="font-weight:800;margin-bottom:6px;color:var(--text-primary);margin-top:8px;">Your communities</div>
+          <div id="communities-list" style="display:flex;flex-direction:column;gap:10px;"></div>
+        </div>
+      </div>
     </div>
 
     <div class="panel">
@@ -206,6 +235,96 @@
   }
 
   loadAnnouncements();
+
+  // Communities MVP
+  async function createCommunity() {
+    const name = document.getElementById('com-name')?.value?.trim();
+    const description = document.getElementById('com-description')?.value?.trim();
+    const privacy = document.getElementById('com-privacy')?.value;
+    const token = getToken();
+    if (!name) return showToast('Community name is required', 'error');
+    if (!token) return showToast('Please log in to create communities', 'error');
+
+    try {
+      const res = await fetch('/api/communities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ name, description, privacy })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to create community');
+      showToast('Community created! 🎉', 'success');
+      // optionally set id to join immediately
+      document.getElementById('com-id').value = data.id || data.communityId || '';
+      await loadCommunities();
+    } catch (e) {
+      showToast(e.message || 'Failed to create community', 'error');
+    }
+  }
+
+  async function joinCommunity() {
+    const communityId = document.getElementById('com-id')?.value?.trim();
+    const inviteToken = document.getElementById('com-invite-token')?.value?.trim();
+    const token = getToken();
+    if (!communityId) return showToast('Community ID is required', 'error');
+    if (!token) return showToast('Please log in to join communities', 'error');
+
+    try {
+      const res = await fetch(`/api/communities/${encodeURIComponent(communityId)}/join`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ inviteToken: inviteToken || null })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to join community');
+      showToast('Joined community! 🎉', 'success');
+      await loadCommunities();
+    } catch (e) {
+      showToast(e.message || 'Failed to join community', 'error');
+    }
+  }
+
+  async function loadCommunities() {
+    const el = document.getElementById('communities-list');
+    if (!el) return;
+    el.innerHTML = '<div style="color:var(--text-muted);font-size:0.9rem;">Loading…</div>';
+
+    try {
+      const res = await fetch('/api/communities');
+      const data = await res.json();
+      const list = data.communities || [];
+
+      if (!list.length) {
+        el.innerHTML = '<div style="color:var(--text-muted);font-size:0.9rem;">No communities yet.</div>';
+        return;
+      }
+
+      el.innerHTML = list.slice(0, 8).map(c => {
+        return `
+          <div style="display:flex;justify-content:space-between;gap:10px;align-items:center; padding:12px 12px; border:1px solid var(--glass-border); border-radius: var(--radius-md); background: rgba(255,255,255,0.02);">
+            <div>
+              <div style="font-weight:900;color:var(--text-primary);">${escapeHtml(c.name)}</div>
+              <div style="font-size:0.78rem;color:var(--text-muted); margin-top:4px;">${escapeHtml(c.creatorUsername || 'Unknown')} · ${escapeHtml(c.privacy || 'public')}</div>
+            </div>
+            <button class="btn btn-outline btn-sm" onclick="selectCommunity('${escapeHtml(c.id)}')">Select</button>
+          </div>
+        `;
+      }).join('');
+    } catch (e) {
+      el.innerHTML = '<div style="color:var(--text-muted);font-size:0.9rem;">Failed to load communities.</div>';
+    }
+  }
+
+  function selectCommunity(id) {
+    const input = document.getElementById('com-id');
+    if (input) input.value = id;
+    showToast('Community selected', 'info');
+  }
+
+  // Toast helper for this page
+  function showToast(msg, type='info') { showGlobalToast(msg, type); }
+
+  loadCommunities();
 
   // Socket discussion wiring (bar-chat)
   initSocket((sock) => {
