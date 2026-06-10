@@ -2,21 +2,35 @@ require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const db = require('./config/database');
+
 const { initializeFirebase, getFirestore } = require('./firebase');
 const firestoreService = require('./firestore-service');
-const mongoose = require('mongoose');
 
-const INITIAL_USE_FIRESTORE = Boolean(
-  process.env.useFirestore === '1' ||
-  process.env.FIREBASE_SERVICE_ACCOUNT_PATH ||
-  process.env.FIREBASE_SERVICE_ACCOUNT ||
-  process.env.GOOGLE_APPLICATION_CREDENTIALS
-);
-let useFirestore = INITIAL_USE_FIRESTORE;
-let mongoReady = false;
+function requireEnv(name) {
+  const value = process.env[name];
+  if (!value || !String(value).trim()) {
+    console.error(`❌ Required environment variable ${name} is missing`);
+    process.exit(1);
+  }
+  return value;
+}
+
+const JWT_SECRET = requireEnv('JWT_SECRET');
+const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
+const SPORTS_API_KEY = process.env.SPORTS_API_KEY || '';
+const SPORTS_API_HOST = process.env.SPORTS_API_HOST || 'api-football-v1.p.rapidapi.com';
+const SPORTS_LEAGUE_ID = process.env.SPORTS_LEAGUE_ID || '39';
+const SPORTS_SEASON = process.env.SPORTS_SEASON || '2025';
+
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
+const isValidEmail = (value) => emailPattern.test(String(value || '').trim());
+const useFirestore = true;
+const mongoReady = false;
 
 // Fix for Node 18+ fetch failed on Windows
 const dns = require('dns');
@@ -26,24 +40,23 @@ dns.setDefaultResultOrder('ipv4first');
 const app = express();
 let server = null;
 let io = null;
-let users = [];
-let rooms = [];
-let events = [];
 
 if (require.main === module) {
   const http = require('http');
   const socketIo = require('socket.io');
   server = http.createServer(app);
   io = socketIo(server, {
-    cors: { origin: '*', methods: ['GET', 'POST'] }
+    cors: { origin: CORS_ORIGIN, methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'] }
   });
 }
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dotsbar_super_secret_key_2026';
-const SPORTS_API_KEY = process.env.SPORTS_API_KEY || '';
-const SPORTS_API_HOST = process.env.SPORTS_API_HOST || 'api-football-v1.p.rapidapi.com';
-const SPORTS_LEAGUE_ID = process.env.SPORTS_LEAGUE_ID || '39';
-const SPORTS_SEASON = process.env.SPORTS_SEASON || '2025';
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' }
+});
 
 const User = require('./models/User');
 const Room = require('./models/Room');
@@ -76,7 +89,9 @@ setInterval(() => {
 }, 60000);
 
 // ── Middleware ─────────────────────────────────────
-app.use(cors());
+app.use(helmet());
+app.use(cors({ origin: CORS_ORIGIN, methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'] }));
+app.use(apiLimiter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -95,53 +110,33 @@ const verifyToken = (req, res, next) => {
 // ── Auth routes ────────────────────────────────────
 app.post('/api/auth/register', async (req, res) => {
   try {
-    const { username, email, password, isCreator } = req.body;
-    if (!username || !email || !password) return res.status(400).json({ error: 'All fields required' });
+    const username = String(req.body.username || '').trim();
+    const email = normalizeEmail(req.body.email);
+    const password = String(req.body.password || '');
+    const isCreator = Boolean(req.body.isCreator);
 
-    if (!useFirestore && !mongoReady) {
-      return res.status(503).json({ error: 'Database unavailable. Please try again later.' });
+    if (!username || !email || !password) {
+      return res.status(400).json({ error: 'Username, email, and password are required.' });
     }
-
-    if (useFirestore) {
-      const existing = await firestoreService.findUserByEmail(email);
-      if (existing) return res.status(400).json({ error: 'Email already registered' });
-      const hashedPassword = await bcrypt.hash(password, 12);
-      const newUser = await firestoreService.createUser({
-        username,
-        email,
-        password: hashedPassword,
-        isCreator: isCreator || false,
-        balance: 0
-      });
-      const token = jwt.sign({ id: newUser.id, username: newUser.username }, JWT_SECRET, { expiresIn: '7d' });
-      return res.json({
-        token,
-        user: {
-          id: newUser.id,
-          username: newUser.username,
-          email: newUser.email,
-          isCreator: newUser.isCreator,
-          balance: newUser.balance
-        }
-      });
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ error: 'A valid email address is required.' });
     }
-
-    // Check if email already exists
-    const existing = await User.findOne({ email });
+    const existing = await firestoreService.findUserByEmail(email);
     if (existing) return res.status(400).json({ error: 'Email already registered' });
-    const newUser = new User({
+
+    const hashedPassword = await bcrypt.hash(password, 12);
+    const newUser = await firestoreService.createUser({
       username,
       email,
-      password,
-      isCreator: isCreator || false,
+      password: hashedPassword,
+      isCreator,
       balance: 0
     });
-    await newUser.save();
-    const token = jwt.sign({ id: newUser._id, username: newUser.username }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({
+    const token = jwt.sign({ id: newUser.id, username: newUser.username }, JWT_SECRET, { expiresIn: '7d' });
+    return res.json({
       token,
       user: {
-        id: newUser._id,
+        id: newUser.id,
         username: newUser.username,
         email: newUser.email,
         isCreator: newUser.isCreator,
@@ -155,27 +150,21 @@ app.post('/api/auth/register', async (req, res) => {
 
 app.post('/api/auth/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const email = normalizeEmail(req.body.email);
+    const password = String(req.body.password || '');
 
-    if (!useFirestore && !mongoReady) {
-      return res.status(503).json({ error: 'Database unavailable. Please try again later.' });
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required.' });
     }
-
-    if (useFirestore) {
-      const user = await firestoreService.findUserByEmail(email);
-      if (!user || !(await bcrypt.compare(password, user.password))) {
-        return res.status(401).json({ error: 'Invalid credentials' });
-      }
-      const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
-      return res.json({ token, user: { id: user.id, username: user.username, email: user.email, isCreator: user.isCreator, balance: user.balance } });
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ error: 'A valid email address is required.' });
     }
-
-    const user = await User.findOne({ email });
+    const user = await firestoreService.findUserByEmail(email);
     if (!user || !(await bcrypt.compare(password, user.password))) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-    const token = jwt.sign({ id: user._id, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ token, user: { id: user._id, username: user.username, email: user.email, isCreator: user.isCreator, balance: user.balance } });
+    const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
+    return res.json({ token, user: { id: user.id, username: user.username, email: user.email, isCreator: user.isCreator, balance: user.balance } });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
@@ -183,6 +172,16 @@ app.post('/api/auth/login', async (req, res) => {
 
 app.get('/api/ping', (req, res) => {
   res.json({ ok: true, message: 'DotsBar API is healthy' });
+});
+
+app.get('/api/health', async (req, res) => {
+  try {
+    const firestore = getFirestore();
+    if (!firestore) throw new Error('Firestore is not configured');
+    res.json({ ok: true, database: 'firestore', timestamp: new Date().toISOString() });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
 });
 
 app.get('/api/firebase-health', async (req, res) => {
@@ -202,19 +201,14 @@ app.get('/api/firebase-health', async (req, res) => {
 
 app.get('/api/profile/:id', verifyToken, async (req, res) => {
   try {
-    if (useFirestore) {
-      const user = await firestoreService.findUserById(req.params.id);
-      if (!user) return res.status(404).json({ error: 'User not found' });
-      return res.json({ id: user.id, username: user.username, email: user.email, isCreator: user.isCreator, balance: user.balance, createdAt: user.createdAt });
-    }
-
-    const user = await User.findById(req.params.id);
+    const user = await firestoreService.findUserById(req.params.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
-    res.json({ id:user._id, username:user.username, email:user.email, isCreator:user.isCreator, balance:user.balance, createdAt:user.createdAt });
+    return res.json({ id: user.id, username: user.username, email: user.email, isCreator: user.isCreator, balance: user.balance, createdAt: user.createdAt });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 });
+
 
 app.put('/api/profile', verifyToken, async (req, res) => {
   try {
@@ -223,15 +217,10 @@ app.put('/api/profile', verifyToken, async (req, res) => {
     if (username) updates.username = username;
     if (bio) updates.profile = { bio };
 
-    if (useFirestore) {
-      const user = await firestoreService.updateUser(req.user.id, updates);
-      if (!user) return res.status(404).json({ error: 'User not found' });
-      return res.json({ id: user.id, username: user.username, email: user.email, isCreator: user.isCreator, balance: user.balance });
-    }
-
-    const user = await User.findByIdAndUpdate(req.user.id, updates, { new: true });
+    const user = await firestoreService.updateUser(req.user.id, updates);
     if (!user) return res.status(404).json({ error: 'User not found' });
-    res.json({ id:user._id, username:user.username, email:user.email, isCreator:user.isCreator, balance:user.balance });
+    return res.json({ id: user.id, username: user.username, email: user.email, isCreator: user.isCreator, balance: user.balance });
+
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
@@ -339,8 +328,9 @@ app.post('/api/events', verifyToken, async (req, res) => {
   try {
     const { title, category, datetime, type, price } = req.body;
     if (!title) return res.status(400).json({ error: 'Title is required' });
-    const user = useFirestore ? await firestoreService.findUserById(req.user.id) : await User.findById(req.user.id);
+    const user = await firestoreService.findUserById(req.user.id);
     if (!user) return res.status(404).json({ error: 'Host user not found' });
+
 
     if (useFirestore) {
       const event = await firestoreService.createEvent({
@@ -378,13 +368,15 @@ app.post('/api/events', verifyToken, async (req, res) => {
 });
 
 app.delete('/api/events/:id', verifyToken, async (req, res) => {
-  if (useFirestore) {
-    return res.status(501).json({ error: 'Event deletion not implemented for Firestore yet' });
+  try {
+    const event = await firestoreService.getEventById(req.params.id);
+    if (!event) return res.status(404).json({ error: 'Event not found' });
+    if (event.hostId !== req.user.id) return res.status(403).json({ error: 'Not authorised to delete this event' });
+    await firestoreService.deleteEvent(req.params.id);
+    return res.json({ success: true });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
   }
-  const idx = events.findIndex(e => e.id === req.params.id && e.hostId === req.user.id);
-  if (idx === -1) return res.status(404).json({ error: 'Event not found or not authorised' });
-  events.splice(idx, 1);
-  res.json({ success: true });
 });
 
 // ── Member Directory + Announcements ────────────────
@@ -420,8 +412,9 @@ app.post('/api/announcements', verifyToken, async (req, res) => {
     const { title, body } = req.body;
     if (!title || !body) return res.status(400).json({ error: 'title and body are required' });
 
-    const user = useFirestore ? await firestoreService.findUserById(req.user.id) : await User.findById(req.user.id);
+    const user = await firestoreService.findUserById(req.user.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
+
 
     if (useFirestore) {
       const ann = await firestoreService.createAnnouncement({
@@ -572,13 +565,9 @@ if (!process.env.VERCEL) {
       const user = socketUsers.get(socket.id) || { username: 'Anonymous' };
       const msg = { username: user.username, message, timestamp: new Date().toISOString(), socketId: socket.id };
       io.to(roomId).emit('chat-message', msg);
-      if (useFirestore) {
-        await firestoreService.addRoomChatMessage(roomId, msg);
-      } else {
-        const room = rooms.find(r => r.name === roomId || r.id === roomId);
-        if (room) room.chatMessages.push(msg);
-      }
+      await firestoreService.addRoomChatMessage(roomId, msg);
     });
+
 
     // Global bar chat
     socket.on('bar-chat', ({ message }) => {
@@ -595,31 +584,21 @@ if (!process.env.VERCEL) {
     // Tip
     socket.on('tip', async ({ roomId, amount, creatorId }) => {
       try {
-        const fromUserDoc = useFirestore ? await firestoreService.findUserById(socketUsers.get(socket.id)?.id) : await User.findById(socketUsers.get(socket.id)?.id);
-        const toUserDoc = useFirestore ? await firestoreService.findUserById(creatorId) : await User.findById(creatorId);
+    const fromUserDoc = await firestoreService.findUserById(socketUsers.get(socket.id)?.id);
+    const toUserDoc = await firestoreService.findUserById(creatorId);
+
         if (!fromUserDoc || !toUserDoc) {
           return socket.emit('error', 'User not found');
         }
         const currentBalance = Number(fromUserDoc.balance || 0);
         const tipAmount = Number(amount || 0);
         if (currentBalance >= tipAmount && tipAmount > 0) {
-          if (useFirestore) {
-            await firestoreService.changeUserBalance(fromUserDoc.id, -tipAmount);
-            await firestoreService.changeUserBalance(toUserDoc.id, tipAmount);
-            await firestoreService.incrementRoomTips(roomId, tipAmount);
-            io.to(roomId).emit('tip-received', { from: fromUserDoc.username, amount: tipAmount, creatorId });
-            socket.emit('tip-sent', { amount: tipAmount, newBalance: currentBalance - tipAmount });
-          } else {
-            fromUserDoc.balance -= tipAmount;
-            toUserDoc.balance += tipAmount;
-            fromUserDoc.totalTipped = (fromUserDoc.totalTipped || 0) + tipAmount;
-            await fromUserDoc.save();
-            await toUserDoc.save();
-            const room = rooms.find(r => r.id === roomId);
-            if (room) room.tipsTotal += tipAmount;
-            io.to(roomId).emit('tip-received', { from: fromUserDoc.username, amount: tipAmount, creatorId });
-            socket.emit('tip-sent', { amount: tipAmount, newBalance: fromUserDoc.balance });
-          }
+          await firestoreService.changeUserBalance(fromUserDoc.id, -tipAmount);
+          await firestoreService.changeUserBalance(toUserDoc.id, tipAmount);
+          await firestoreService.incrementRoomTips(roomId, tipAmount);
+          io.to(roomId).emit('tip-received', { from: fromUserDoc.username, amount: tipAmount, creatorId });
+          socket.emit('tip-sent', { amount: tipAmount, newBalance: currentBalance - tipAmount });
+
         } else {
           socket.emit('error', 'Insufficient DotsCoins');
         }
@@ -646,31 +625,13 @@ if (!process.env.VERCEL) {
 const PORT = process.env.PORT || 3001;
 
 async function startService() {
-  mongoReady = false;
-
-  if (INITIAL_USE_FIRESTORE) {
-    const initResult = initializeFirebase();
-    useFirestore = initResult.initialized;
-    if (useFirestore) {
-      console.log('✅ Using Firestore as the primary data store');
-    } else {
-      console.warn('⚠️ Firestore was enabled but could not initialize. MongoDB will be attempted.');
-      mongoReady = await db();
-    }
-  } else {
-    mongoReady = await db();
-    if (!mongoReady) {
-      const initResult = initializeFirebase();
-      useFirestore = initResult.initialized;
-      if (useFirestore) {
-        console.log('✅ MongoDB unavailable; falling back to Firestore');
-      }
-    }
+  const initResult = initializeFirebase();
+  if (!initResult.initialized) {
+    console.error('❌ Firebase is not initialized. Set FIREBASE_SERVICE_ACCOUNT_PATH, FIREBASE_SERVICE_ACCOUNT, or GOOGLE_APPLICATION_CREDENTIALS.');
+    process.exit(1);
   }
 
-  if (!mongoReady && !useFirestore) {
-    console.warn('⚠️ No working database connection available. Some routes may fail.');
-  }
+  console.log('✅ Using Firestore as the primary data store');
 
   if (require.main === module && server) {
     server.listen(PORT, () => {
@@ -678,7 +639,7 @@ async function startService() {
 🍺 ===================================
    DotsBar Server Running!
    http://localhost:${PORT}
-   using Firestore: ${useFirestore}
+   using Firestore: true
 🍺 ===================================
       `);
     });

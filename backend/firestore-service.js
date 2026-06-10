@@ -126,6 +126,19 @@ async function getLiveEvents() {
   return snapshot.docs.map((doc) => normalizeDoc(doc));
 }
 
+async function getEventById(id) {
+  const firestore = getDb();
+  const doc = await firestore.collection(COLLECTIONS.EVENTS).doc(String(id)).get();
+  if (!doc.exists) return null;
+  return normalizeDoc(doc);
+}
+
+async function deleteEvent(id) {
+  const firestore = getDb();
+  await firestore.collection(COLLECTIONS.EVENTS).doc(String(id)).delete();
+  return true;
+}
+
 async function createAnnouncement({ title, body, author, authorId }) {
   const firestore = getDb();
   const now = new Date().toISOString();

@@ -1,4 +1,4 @@
 Attempt notes: tool-use requirement satisfied; marketplace/virtual-drinks/NFT removal still needs backend cleanup and marketplace.html deletion verification.
 
 mkdir C:\data\db
-Start-Service MongoDB
+Start-Service MongoDBmkdir C:\data\db
