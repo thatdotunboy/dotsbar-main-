@@ -185,13 +185,12 @@
   <div class="hero-particles" id="particles-container"></div>
 
   <div class="hero-inner">
-    <div class="hero-pill">2,847 people vibing right now</div>
+   
 
     <h1 class="hero-h1">
-      The World's First<br>
-      <span class="g">Sports Bar</span><br>
+      
 
-      &amp; Streaming Hub
+      Streaming Hub
     </h1>
 
     <p class="hero-sub">
@@ -250,12 +249,13 @@
 
 <div class="toast-container" id="toast-container"></div>
 
+  <script src="script.js"></script>
+  <script>window.__DOTSBAR_API_BASE__ = window.__DOTSBAR_API_BASE__ || window.location.origin;</script>
+
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-auth-compat.js"></script>
 
-  <script src="script.js"></script>
-  <script>window.__DOTSBAR_API_BASE__ = window.__DOTSBAR_API_BASE__ || window.location.origin;</script>
 <script>
 // Particles
 (function() {
@@ -293,67 +293,140 @@ document.getElementById('open-register')?.addEventListener('click', () => {
 document.getElementById('modal-close')?.addEventListener('click', () => modal.classList.remove('open'));
 modal?.addEventListener('click', e => { if (e.target === modal) modal.classList.remove('open'); });
 
+// ── Firebase init (client auth) ────────────────────
+// Matches the approach already used in frontend/bar.html
+const firebaseConfig = {
+  apiKey: "AIzaSyB8D92i7j2qQW3PeolxyfbQCr6l8Qak-Zw",
+  authDomain: "dotsbar-6106f.firebaseapp.com",
+  projectId: "dotsbar-6106f",
+  storageBucket: "dotsbar-6106f.firebasestorage.app",
+  messagingSenderId: "290270763437",
+  appId: "1:290270763437:web:6a3301f5093b2b146ca924",
+  measurementId: "G-V1VQQ9DFJ7"
+};
+
+if (typeof firebase !== 'undefined' && !firebase.apps.length) {
+  firebase.initializeApp(firebaseConfig);
+}
+
+function setAuthLoading(btn, text) {
+  if (!btn) return;
+  btn.textContent = text;
+  btn.disabled = true;
+}
+
+function resetAuthButton(btn, text) {
+  if (!btn) return;
+  btn.textContent = text;
+  btn.disabled = false;
+}
+
+async function syncFirestoreUser(token, { username, isCreator } = {}) {
+  const syncRes = await fetch('/api/auth/sync', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ username, isCreator })
+  });
+
+  const syncData = await syncRes.json().catch(() => ({}));
+  if (!syncRes.ok) throw new Error(syncData.error || 'Sync failed');
+  return syncData.user;
+}
+
 // ── Login ─────────────────────────────────────────
-document.getElementById('login-btn')?.addEventListener('click', async () => {
-  const emailEl = document.getElementById('login-email');
-  const passEl  = document.getElementById('login-password');
-  const loginBtn = document.getElementById('login-btn');
-  const email    = emailEl.value.trim();
-  const password = passEl.value;
-  if (!email || !password) { showToast('Please enter your email and password', 'error'); return; }
-  loginBtn.textContent = 'Logging in…';
-  loginBtn.disabled = true;
+document.getElementById('login-btn').addEventListener('click', async (e) => {
+  e.preventDefault();
+
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+
+  if (!email || !password) {
+    alert('Please enter your email and password');
+    return;
+  }
+
   try {
-    const userCredential = await firebase.auth().signInWithEmailAndPassword(email, password);
-    const token = await userCredential.user.getIdToken();
-    const r = await fetch('/api/auth/sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
-    });
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error || 'Login sync failed');
+    const userCredential = await firebase.auth()
+      .signInWithEmailAndPassword(email, password);
+
+    const user = userCredential.user;
+
+    const token = await user.getIdToken();
+
     localStorage.setItem('token', token);
-    localStorage.setItem('user', JSON.stringify(d.user));
-    modal.classList.remove('open');
-    showToast(`Welcome back, ${d.user.username}! 🍺`, 'success');
-    setTimeout(() => { window.location.href = consumeLoginRedirect(); }, 1000);
-  } catch (e) {
-    showToast(e.message || 'Login failed', 'error');
-    loginBtn.textContent = 'Log In';
-    loginBtn.disabled = false;
+
+    localStorage.setItem('user', JSON.stringify({
+      uid: user.uid,
+      email: user.email
+    }));
+
+    alert('Login successful!');
+
+    window.location.href = 'bar.html';
+
+  } catch (error) {
+    console.error(error);
+
+    switch (error.code) {
+      case 'auth/user-not-found':
+        alert('No account found with this email');
+        break;
+
+      case 'auth/wrong-password':
+        alert('Incorrect password');
+        break;
+
+      case 'auth/invalid-email':
+        alert('Invalid email address');
+        break;
+
+      default:
+        alert(error.message);
+    }
   }
 });
 
 // ── Register ──────────────────────────────────────
 document.getElementById('register-btn')?.addEventListener('click', async () => {
-  const username   = document.getElementById('reg-username').value.trim();
-  const email      = document.getElementById('reg-email').value.trim();
-  const password   = document.getElementById('reg-password').value;
-  const isCreator  = document.getElementById('reg-creator').checked;
-  const regBtn     = document.getElementById('register-btn');
-  if (!username || !email || !password) { showToast('Please fill in all fields', 'error'); return; }
-  if (password.length < 6) { showToast('Password must be at least 6 characters', 'error'); return; }
-  regBtn.textContent = 'Creating account…';
-  regBtn.disabled = true;
+  console.log('Register button clicked');
+
+  const username = document.getElementById('reg-username').value.trim();
+  const email = document.getElementById('reg-email').value.trim();
+  const password = document.getElementById('reg-password').value;
+  const isCreator = document.getElementById('reg-creator').checked;
+  const regBtn = document.getElementById('register-btn');
+
+  if (!username || !email || !password) {
+    showToast('Please fill in all fields', 'error');
+    return;
+  }
+  if (password.length < 6) {
+    showToast('Password must be at least 6 characters', 'error');
+    return;
+  }
+
   try {
-    const userCredential = await firebase.auth().createUserWithEmailAndPassword(email, password);
-    const token = await userCredential.user.getIdToken();
-    const r = await fetch('/api/auth/sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ username, isCreator })
-    });
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error || 'Registration sync failed');
+    if (!firebase?.auth) throw new Error('Firebase auth not available');
+
+    setAuthLoading(regBtn, 'Creating account…');
+
+    const cred = await firebase.auth().createUserWithEmailAndPassword(email, password);
+    const token = await cred.user.getIdToken();
+
+    const user = await syncFirestoreUser(token, { username, isCreator });
+
     localStorage.setItem('token', token);
-    localStorage.setItem('user', JSON.stringify(d.user));
+    localStorage.setItem('user', JSON.stringify(user));
+
     modal.classList.remove('open');
-    showToast(`Welcome to DotsBar, ${d.user.username}! 🎉 You got 1,000 DotsCoins to start!`, 'success');
+    showToast(`Welcome to DotsBar, ${user.username}! 🎉`, 'success');
     setTimeout(() => { window.location.href = consumeLoginRedirect(); }, 1200);
   } catch (e) {
-    showToast(e.message || 'Registration failed', 'error');
-    regBtn.textContent = 'Create My Account';
-    regBtn.disabled = false;
+    showToast(e?.message || 'Registration failed', 'error');
+    resetAuthButton(regBtn, 'Create My Account');
   }
 });
 
