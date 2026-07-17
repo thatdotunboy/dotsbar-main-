@@ -1,5 +1,26 @@
 node_modules/
+
+# Environment — NEVER commit
 .env
+.env.local
+.env.production
+.env.*.local
+
+# Build outputs
+.next/
+dist/
+build/
+out/
+
+# Logs
 *.log
+npm-debug.log*
+
+# OS files
 .DS_Store
 Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
